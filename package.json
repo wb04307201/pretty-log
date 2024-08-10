@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsc -p tsconfig.build.json",
-    "pub": "npm publish --access public"
+    "pub": "npm publish"
   },
   "devDependencies": {
     "typescript": "^5.5.3",
