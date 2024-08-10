@@ -2,7 +2,7 @@
   "name": "@wb04307201/pretty-log",
   "description": "A frontend toolkit for pretty console.log output.",
   "private": false,
-  "version": "0.5.0",
+  "version": "0.8.0",
   "type": "module",
   "types": "lib/main.d.ts",
   "main": "dist/pretty-log.cjs",
