@@ -1,5 +1,14 @@
-# PrettyLog 漂亮的Log
+<div align="center">
+<h1>Pretty-Log</h1>
+<h2>美化log</h2>
+</div>
 
+## 安装
+```sh
+  npm install @wb04307201/pretty-log -g
+```
+
+## 使用
 ```javascript
     import {prettyLog} from './src/main.ts';
 
@@ -23,5 +32,5 @@
 
     prettyLog.picture("https://faw-cms-1300211780.cos.ap-beijing.myqcloud.com/202405/51716773469593/1716773469593%E8%BD%A6%E5%9E%8B%E5%9B%BE4_1000x400.png", 0.2)
 ```
-
+## 输出
 ![img.png](img.png)
