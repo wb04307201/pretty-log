@@ -1,0 +1,28 @@
+{
+  "name": "@wb04307201/pretty-log",
+  "description": "A frontend toolkit for pretty console.log output.",
+  "private": false,
+  "version": "0.5.0",
+  "type": "module",
+  "types": "lib/main.d.ts",
+  "main": "dist/pretty-log.cjs",
+  "module": "dist/pretty-log.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc -p tsconfig.build.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "vite": "^5.4.0"
+  },
+  "author": "wb04307201",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/wb04307201/pretty-log"
+  },
+  "bugs": {
+    "url": "https://gitee.com/wb04307201/pretty-log/issues"
+  },
+  "homepage": "https://gitee.com/wb04307201"
+}
