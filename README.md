@@ -5,7 +5,7 @@
 
 ## 安装
 ```sh
-  npm install @wb04307201/pretty-log -g
+  npm install @wb04307201/pretty-log
 ```
 
 ## 使用
