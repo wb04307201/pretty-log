@@ -2,19 +2,16 @@
   "name": "@wb04307201/pretty-log",
   "description": "A frontend toolkit for pretty console.log output.",
   "private": false,
-  "version": "0.8.0",
-  "type": "module",
-  "types": "lib/main.d.ts",
-  "main": "dist/pretty-log.cjs",
-  "module": "dist/pretty-log.js",
+  "version": "0.9.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build && tsc -p tsconfig.build.json",
-    "pub": "npm publish --access public"
+    "build": "tsc",
+    "release": "tsc && npm publish --access public"
   },
+  "keywords": [],
   "devDependencies": {
-    "typescript": "^5.5.3",
-    "vite": "^5.4.0"
+    "typescript": "^5.5.4"
   },
   "author": "wb04307201",
   "license": "Apache-2.0",

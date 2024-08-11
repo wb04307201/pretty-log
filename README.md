@@ -10,7 +10,7 @@
 
 ## 使用
 ```javascript
-    import {prettyLog} from './src/main.ts';
+    import * as prettyLog from "@wb04307201/pretty-log";
 
     prettyLog.info("Hello world!")
     prettyLog.info("信息", "Hello world!")
