@@ -2,15 +2,17 @@
   "name": "@wb04307201/pretty-log",
   "description": "A frontend toolkit for pretty console.log output.",
   "private": false,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "release": "tsc && npm publish --access public"
+    "release": "tsc && npm publish --access public",
+    "test": "parcel test/test.html"
   },
   "keywords": [],
   "devDependencies": {
+    "parcel-bundler": "^1.12.5",
     "typescript": "^5.5.4"
   },
   "author": "wb04307201",
