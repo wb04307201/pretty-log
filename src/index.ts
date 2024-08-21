@@ -7,7 +7,7 @@
  * @param value 待检查的值，可以是字符串或对象
  * @returns 返回布尔值，如果值为空，则返回true；否则返回false
  */
-const isEmpty = (value: string | object): boolean => {
+const isEmpty = (value: any): boolean => {
     return value === null || value === undefined || value === '';
 }
 
@@ -17,15 +17,14 @@ const isEmpty = (value: string | object): boolean => {
  * @param text 打印的文本内容，可以是字符串或对象
  * @param color 控制台打印文字的颜色
  */
-const prettyPrint = (title: string, text: string | object, color: string): void => {
+const prettyPrint = (title: string, text: any, color: string): void => {
     // 判断text类型，如果是对象则转换为JSON字符串格式，以便正确打印
     let formattedText = typeof text === 'object' ? JSON.stringify(text) : text;
     // 使用console.log打印标题和内容，同时通过样式参数对输出进行格式化
     console.log(
-        `%c ${title} %c ${formattedText} %c`,
+        `%c ${title} %c ${formattedText}`,
         `background:${color};border:1px solid ${color}; padding: 1px; border-radius: 2px 0 0 2px; color: #fff;`,
-        `border:1px solid ${color}; padding: 1px; border-radius: 0 2px 2px 0; color: ${color};`,
-        'background:transparent'
+        `border:1px solid ${color}; padding: 1px; border-radius: 0 2px 2px 0; color: ${color};`
     );
 };
 
@@ -33,16 +32,16 @@ const prettyPrint = (title: string, text: string | object, color: string): void 
  * 显示信息对话框
  *
  * 该函数用于弹出一个信息对话框，对话框包含一个标题和一段文本内容
- * 当传入的content为空时，textOrTitle将作为标题；否则，textOrTitle为内容，标题为'Info'
+ * 当传入的content为空时，contentOrTitle将作为标题；否则，contentOrTitle为内容，标题为'Info'
  *
- * @param textOrTitle 字符串类型，当content为空时，这是标题；否则是文本内容
- * @param content 字符串或对象类型，对话框的文本内容，如果为空，则textOrTitle作为标题，否则textOrTitle作为内容，而content为文本
+ * @param contentOrTitle 字符串类型，当content为空时，这是标题；否则是文本内容
+ * @param content 字符串或对象类型，对话框的文本内容，如果为空，则contentOrTitle作为标题，否则contentOrTitle作为内容，而content为文本
  * @returns 无返回值
  */
-export const info = (textOrTitle: string, content: string | object = ''): void => {
+export const info = (contentOrTitle: any, content: any = ''): void => {
     // 根据content是否为空，分配title和text
-    const title = isEmpty(content) ? 'Info' : textOrTitle;
-    const text = isEmpty(content) ? textOrTitle : content;
+    const title = isEmpty(content) ? 'Info' : contentOrTitle;
+    const text = isEmpty(content) ? contentOrTitle : content;
     // 调用prettyPrint函数，格式化打印对话框
     prettyPrint(title, text, '#A6A6A6');
 };
@@ -54,13 +53,13 @@ export const info = (textOrTitle: string, content: string | object = ''): void =
  * 通过判断内容是否为空来决定标题和内容的分配，如果内容为空，标题为'Error'，内容为提供的字符串；否则，标题和内容分别对应提供的两个参数
  * 最后，使用prettyPrint函数以特定的颜色格式化显示标题和内容
  *
- * @param textOrTitle 错误信息的标题或内容如果提供了两个参数，此参数为标题
+ * @param contentOrTitle 错误信息的标题或内容如果提供了两个参数，此参数为标题
  * @param content 错误信息的内容如果只有一个参数被提供，此参数被忽略
  */
-export const error = (textOrTitle: string, content: string | object = ''): void => {
+export const error = (contentOrTitle: any, content: any = ''): void => {
     // 根据content是否为空，分配标题和内容
-    const title = isEmpty(content) ? 'Error' : textOrTitle;
-    const text = isEmpty(content) ? textOrTitle : content;
+    const title = isEmpty(content) ? 'Error' : contentOrTitle;
+    const text = isEmpty(content) ? contentOrTitle : content;
     // 使用特定颜色格式化显示错误信息
     prettyPrint(title, text, '#EC7270');
 };
@@ -70,16 +69,16 @@ export const error = (textOrTitle: string, content: string | object = ''): void 
  *
  * 此函数用于在控制台中格式化并输出警告信息它接受一个标题和一个内容参数，
  * 并根据这些参数在控制台中打印出格式化的警告信息标题默认为'Warning'，
- * 如果提供了content参数，则使用content作为标题内容如果只提供了textOrTitle参数，
+ * 如果提供了content参数，则使用content作为标题内容如果只提供了contentOrTitle参数，
  * 则该参数既作为标题也作为内容
  *
- * @param textOrTitle - 警告信息的标题或内容
+ * @param contentOrTitle - 警告信息的标题或内容
  * @param content - 警告信息的内容，可以是字符串或对象，默认为空字符串
  */
-export const warning = (textOrTitle: string, content: string | object = ''): void => {
+export const warning = (contentOrTitle: any, content: any = ''): void => {
     // 根据content参数的有无，分配标题和内容
-    const title = isEmpty(content) ? 'Warning' : textOrTitle;
-    const text = isEmpty(content) ? textOrTitle : content;
+    const title = isEmpty(content) ? 'Warning' : contentOrTitle;
+    const text = isEmpty(content) ? contentOrTitle : content;
     // 调用prettyPrint函数以特定格式打印警告信息
     prettyPrint(title, text, '#F1AC6A');
 };
@@ -90,13 +89,13 @@ export const warning = (textOrTitle: string, content: string | object = ''): voi
  * 此函数接受一个标题和一个内容参数，用于在成功操作后向用户提供反馈信息
  * 如果只提供一个字符串，该字符串将同时作为标题和内容；如果提供一个对象作为内容，标题和内容将分别设置
  *
- * @param textOrTitle 标题字符串，如果内容为空，则同时作为内容字符串
+ * @param contentOrTitle 标题字符串，如果内容为空，则同时作为内容字符串
  * @param content 内容字符串或对象，默认为空字符串如果为空字符串，则内容为标题字符串
  */
-export const success = (textOrTitle: string, content: string | object = ''): void => {
+export const success = (contentOrTitle: any, content: any = ''): void => {
     // 根据内容是否为空，动态设置标题和内容
-    const title = isEmpty(content) ? 'Success ' : textOrTitle;
-    const text = isEmpty(content) ? textOrTitle : content;
+    const title = isEmpty(content) ? 'Success ' : contentOrTitle;
+    const text = isEmpty(content) ? contentOrTitle : content;
     // 使用指定的颜色格式化和打印信息
     prettyPrint(title, text, '#95DA69');
 };

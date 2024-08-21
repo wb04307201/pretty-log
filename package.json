@@ -2,14 +2,14 @@
   "name": "@wb04307201/pretty-log",
   "description": "A frontend toolkit for pretty console.log output.",
   "private": false,
-  "version": "0.9.3",
+  "version": "0.9.4",
   "source": "src/index.ts",
   "main": "dist/main.js",
   "module": "dist/module.js",
   "types": "dist/types.d.ts",
   "scripts": {
     "build": "parcel build",
-    "release": "parcel build && npm publish --access public",
+    "release": "rimraf ./dist && parcel build && npm publish --access public",
     "test": "parcel test/test.html"
   },
   "keywords": [],
@@ -17,6 +17,7 @@
     "@parcel/packager-ts": "^2.12.0",
     "@parcel/transformer-typescript-types": "^2.12.0",
     "parcel": "^2.12.0",
+    "rimraf": "^6.0.1",
     "typescript": "^5.5.4"
   },
   "author": "wb04307201",
