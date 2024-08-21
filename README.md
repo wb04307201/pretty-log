@@ -10,7 +10,7 @@
 
 ## 使用
 ```javascript
-import * as prettyLog from "@wb04307201/pretty-log";
+import * as prettyLog from '../src/index.ts'
 
 // 信息
 prettyLog.info("Hello world!")
@@ -44,6 +44,7 @@ prettyLog.table([{a: 1, b: 1, c: 1}, {a: 2, b: 2, c: 2}, {a: 3, b: 3, c: 3}])
 prettyLog.picture("https://faw-cms-1300211780.cos.ap-beijing.myqcloud.com/202405/51716773469593/1716773469593%E8%BD%A6%E5%9E%8B%E5%9B%BE4_1000x400.png", 0.2)
 
 // json格式
+prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 ```
 ## 输出
