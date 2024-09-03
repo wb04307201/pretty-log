@@ -48,4 +48,4 @@ prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 ```
 ## 输出
-![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png)
+![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)
