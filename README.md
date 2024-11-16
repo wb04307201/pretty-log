@@ -3,6 +3,8 @@
 <h2>美化log</h2>
 </div>
 
+[![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
+
 ## 安装
 ```sh
   npm install @wb04307201/pretty-log
