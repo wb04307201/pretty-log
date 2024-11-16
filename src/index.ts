@@ -11,22 +11,37 @@ const isEmpty = (value: any): boolean => {
     return value === null || value === undefined || value === '';
 }
 
+const stringify = (value: any): boolean => {
+    return typeof value === 'object' ? JSON.stringify(value) : value;
+}
+
 /**
- * 将给定的文本或对象以漂亮的格式打印到控制台
- * @param title 打印标题
- * @param text 打印的文本内容，可以是字符串或对象
- * @param color 控制台打印文字的颜色
+ * 格式化打印控制台日志
+ * @param title 日志标题
+ * @param text 日志内容数组
+ * @param color 日志的显示颜色
  */
-const prettyPrint = (title: string, text: any, color: string): void => {
-    // 判断text类型，如果是对象则转换为JSON字符串格式，以便正确打印
-    let formattedText = typeof text === 'object' ? JSON.stringify(text) : text;
-    // 使用console.log打印标题和内容，同时通过样式参数对输出进行格式化
-    console.log(
-        `%c ${title} %c ${formattedText}`,
-        `background:${color};border:1px solid ${color}; padding: 1px; border-radius: 2px 0 0 2px; color: #fff;`,
-        `border:1px solid ${color}; padding: 1px; border-radius: 0 2px 2px 0; color: ${color};`
-    );
+const prettyPrint = (title: string, text: any[], color: string): void => {
+    // 初始化内容字符串，以包含标题
+    let content = `%c ${title} `;
+    // 遍历文本数组，格式化每个元素并添加到内容字符串中
+    for (const idx in text) {
+        const formattedText = stringify(text[idx]);
+        content = content + `\n%c ${formattedText} `
+    }
+    // 初始化日志数组，用于存储格式化后的日志内容和样式
+    let logs: any = []
+    // 将内容和标题的样式添加到日志数组中
+    logs.push(content)
+    logs.push(`background:${color};border:1px solid ${color}; padding: 1px; border-radius: 2px; color: #fff;`)
+    // 遍历文本数组，为每个元素添加相应的样式到日志数组中
+    for (const idx in text) {
+        logs.push(`border:1px solid ${color}; padding: 1px; border-radius: 2px; color: ${color};`)
+    }
+    // 输出格式化后的日志到控制台
+    console.log(...logs);
 };
+
 
 /**
  * 显示信息对话框
@@ -38,10 +53,10 @@ const prettyPrint = (title: string, text: any, color: string): void => {
  * @param content 字符串或对象类型，对话框的文本内容，如果为空，则contentOrTitle作为标题，否则contentOrTitle作为内容，而content为文本
  * @returns 无返回值
  */
-export const info = (contentOrTitle: any, content: any = ''): void => {
+export const info = (contentOrTitle: any, ...content: any[]): void => {
     // 根据content是否为空，分配title和text
-    const title = isEmpty(content) ? 'Info' : contentOrTitle;
-    const text = isEmpty(content) ? contentOrTitle : content;
+    const title = content.length == 0 ? 'Info' : contentOrTitle;
+    const text = content.length == 0  ? [contentOrTitle] : content;
     // 调用prettyPrint函数，格式化打印对话框
     prettyPrint(title, text, '#A6A6A6');
 };
@@ -56,10 +71,10 @@ export const info = (contentOrTitle: any, content: any = ''): void => {
  * @param contentOrTitle 错误信息的标题或内容如果提供了两个参数，此参数为标题
  * @param content 错误信息的内容如果只有一个参数被提供，此参数被忽略
  */
-export const error = (contentOrTitle: any, content: any = ''): void => {
+export const error = (contentOrTitle: any, ...content: any[]): void => {
     // 根据content是否为空，分配标题和内容
-    const title = isEmpty(content) ? 'Error' : contentOrTitle;
-    const text = isEmpty(content) ? contentOrTitle : content;
+    const title = content.length == 0 ? 'Error' : contentOrTitle;
+    const text = content.length == 0  ? [contentOrTitle] : content;
     // 使用特定颜色格式化显示错误信息
     prettyPrint(title, text, '#EC7270');
 };
@@ -75,10 +90,10 @@ export const error = (contentOrTitle: any, content: any = ''): void => {
  * @param contentOrTitle - 警告信息的标题或内容
  * @param content - 警告信息的内容，可以是字符串或对象，默认为空字符串
  */
-export const warning = (contentOrTitle: any, content: any = ''): void => {
+export const warning = (contentOrTitle: any, ...content: any[]): void => {
     // 根据content参数的有无，分配标题和内容
-    const title = isEmpty(content) ? 'Warning' : contentOrTitle;
-    const text = isEmpty(content) ? contentOrTitle : content;
+    const title = content.length == 0 ? 'Warning' : contentOrTitle;
+    const text = content.length == 0  ? [contentOrTitle] : content;
     // 调用prettyPrint函数以特定格式打印警告信息
     prettyPrint(title, text, '#F1AC6A');
 };
@@ -92,10 +107,10 @@ export const warning = (contentOrTitle: any, content: any = ''): void => {
  * @param contentOrTitle 标题字符串，如果内容为空，则同时作为内容字符串
  * @param content 内容字符串或对象，默认为空字符串如果为空字符串，则内容为标题字符串
  */
-export const success = (contentOrTitle: any, content: any = ''): void => {
+export const success = (contentOrTitle: any, ...content: any[]): void => {
     // 根据内容是否为空，动态设置标题和内容
-    const title = isEmpty(content) ? 'Success ' : contentOrTitle;
-    const text = isEmpty(content) ? contentOrTitle : content;
+    const title = content.length == 0 ? 'Success' : contentOrTitle;
+    const text = content.length == 0  ? [contentOrTitle] : content;
     // 使用指定的颜色格式化和打印信息
     prettyPrint(title, text, '#95DA69');
 };
@@ -123,7 +138,7 @@ export const rainbow = (text: string | object): void => {
  */
 export const group = (title: string, content: string[] | object[], expand: boolean = true): void => {
     // 创建一个组
-    if(expand)
+    if (expand)
         console.group(`%c${title}:`, "background-color: #7B79E8; color: #ffffff; font-weight: bold; padding: 4px;");
     else
         console.groupCollapsed(`%c${title}:`, "background-color: #7B79E8; color: #ffffff; font-weight: bold; padding: 4px;");

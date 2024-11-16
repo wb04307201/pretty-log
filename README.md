@@ -3,6 +3,8 @@
 <h2>美化log</h2>
 </div>
 
+[![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
+
 ## 安装
 ```sh
   npm install @wb04307201/pretty-log
@@ -48,4 +50,4 @@ prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 ```
 ## 输出
-![img.png](img.png)
+![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)

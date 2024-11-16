@@ -12,18 +12,22 @@
     // 信息
     prettyLog.info("Hello world!")
     prettyLog.info("信息", "Hello world!")
+    prettyLog.info("信息", "Hello world!", {a: 1, b: 2, c: 3})
 
     // 错误
     prettyLog.error("Hello world!")
     prettyLog.error("错误", "Hello world!")
+    prettyLog.error("错误", "Hello world!", {a: 1, b: 2, c: 3})
 
     // 警告
     prettyLog.warning("Hello world!")
     prettyLog.warning("警告", "Hello world!")
+    prettyLog.warning("警告", "Hello world!", {a: 1, b: 2, c: 3})
 
     // 成功
     prettyLog.success("Hello world!")
     prettyLog.success("成功", "Hello world!")
+    prettyLog.success("成功", "Hello world!", {a: 1, b: 2, c: 3})
 
     // 彩虹
     prettyLog.rainbow("来 左边 跟我一起画个龙在你右边 画一道彩虹")
@@ -39,10 +43,6 @@
 
     // 图片
     prettyLog.picture("https://faw-cms-1300211780.cos.ap-beijing.myqcloud.com/202405/51716773469593/1716773469593%E8%BD%A6%E5%9E%8B%E5%9B%BE4_1000x400.png", 0.2)
-
-    // json格式
-    prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
-    prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 </script>
 </body>
 </html>
