@@ -1,16 +1,9 @@
 /**
- * 检查给定值是否为空
+ * 将对象类型值转换为JSON字符串。
  *
- * 该函数用于判断传入的值是否为空，支持字符串和对象类型的检查
- * 空值的定义包括：null、undefined和空字符串('')
- *
- * @param value 待检查的值，可以是字符串或对象
- * @returns 返回布尔值，如果值为空，则返回true；否则返回false
+ * @param value - 要转换的值，可以是任意类型。
+ * @returns 如果输入值是对象类型，则返回其JSON字符串表示形式；否则，返回值本身。
  */
-const isEmpty = (value: any): boolean => {
-    return value === null || value === undefined || value === '';
-}
-
 const stringify = (value: any): boolean => {
     return typeof value === 'object' ? JSON.stringify(value) : value;
 }
@@ -42,59 +35,57 @@ const prettyPrint = (title: string, text: any[], color: string): void => {
     console.log(...logs);
 };
 
-
 /**
- * 显示信息对话框
+ * 输出信息框
  *
- * 该函数用于弹出一个信息对话框，对话框包含一个标题和一段文本内容
- * 当传入的content为空时，contentOrTitle将作为标题；否则，contentOrTitle为内容，标题为'Info'
+ * 该函数用于输出一个带有标题和内容的信息框如果只提供一个参数，它将作为内容显示，并使用默认标题 'Info'
+ * 如果提供了多个参数，第一个参数将作为标题，其余参数作为内容显示
  *
- * @param contentOrTitle 字符串类型，当content为空时，这是标题；否则是文本内容
- * @param content 字符串或对象类型，对话框的文本内容，如果为空，则contentOrTitle作为标题，否则contentOrTitle作为内容，而content为文本
- * @returns 无返回值
+ * @param contentOrTitle {any} - 内容或标题，具体取决于后续内容参数的数量
+ * @param content 可变参数，包含错误的详细信息
  */
 export const info = (contentOrTitle: any, ...content: any[]): void => {
-    // 根据content是否为空，分配title和text
+    // 根据内容参数的数量，决定标题是使用默认值 'Info' 还是使用提供的第一个参数
     const title = content.length == 0 ? 'Info' : contentOrTitle;
+    // 根据内容参数的数量，决定文本是使用提供的第一个参数还是使用其余参数
     const text = content.length == 0  ? [contentOrTitle] : content;
-    // 调用prettyPrint函数，格式化打印对话框
+    // 使用确定的标题和文本，以及指定的颜色，调用 prettyPrint 函数来输出信息框
     prettyPrint(title, text, '#A6A6A6');
 };
 
 /**
- * 显示错误信息
+ * 输出错误信息的函数
  *
- * 此函数用于统一显示错误信息的格式它可以接受一个标题和一个内容，如果只提供一个字符串，将同时用作标题和内容
- * 通过判断内容是否为空来决定标题和内容的分配，如果内容为空，标题为'Error'，内容为提供的字符串；否则，标题和内容分别对应提供的两个参数
- * 最后，使用prettyPrint函数以特定的颜色格式化显示标题和内容
+ * 该函数用于以格式化的方式输出错误信息它接受一个参数或多个参数，并将它们分类为标题和文本，
+ * 然后使用特定的颜色进行打印这个函数的存在是为了在控制台中以一种一致且易于识别的方式展示错误信息，
+ * 以便开发者快速注意到错误
  *
- * @param contentOrTitle 错误信息的标题或内容如果提供了两个参数，此参数为标题
- * @param content 错误信息的内容如果只有一个参数被提供，此参数被忽略
+ * @param contentOrTitle 错误的标题或内容，根据传入的参数数量决定其作用
+ * @param content 可变参数，包含错误的详细信息
  */
 export const error = (contentOrTitle: any, ...content: any[]): void => {
-    // 根据content是否为空，分配标题和内容
+    // 根据内容参数的数量，决定标题是使用默认值 'Info' 还是使用提供的第一个参数
     const title = content.length == 0 ? 'Error' : contentOrTitle;
     const text = content.length == 0  ? [contentOrTitle] : content;
-    // 使用特定颜色格式化显示错误信息
+    // 使用确定的标题和文本，以及指定的颜色，调用 prettyPrint 函数来输出信息框
     prettyPrint(title, text, '#EC7270');
 };
 
 /**
- * 显示警告信息
+ * 显示警告信息。
  *
- * 此函数用于在控制台中格式化并输出警告信息它接受一个标题和一个内容参数，
- * 并根据这些参数在控制台中打印出格式化的警告信息标题默认为'Warning'，
- * 如果提供了content参数，则使用content作为标题内容如果只提供了contentOrTitle参数，
- * 则该参数既作为标题也作为内容
+ * 该函数用于显示警告信息，可以接受一个或多个消息参数。如果没有提供其他消息参数，则默认标题为 'Warning'。
+ * 函数会调用 `prettyPrint` 函数来格式化并显示消息。
  *
- * @param contentOrTitle - 警告信息的标题或内容
- * @param content - 警告信息的内容，可以是字符串或对象，默认为空字符串
+ * @param contentOrTitle 第一个消息参数，如果没有其他消息参数，则作为标题。
+ * @param content 可变参数，包含错误的详细信息
  */
 export const warning = (contentOrTitle: any, ...content: any[]): void => {
-    // 根据content参数的有无，分配标题和内容
+    // 根据 content 数组的长度确定标题和文本
     const title = content.length == 0 ? 'Warning' : contentOrTitle;
     const text = content.length == 0  ? [contentOrTitle] : content;
-    // 调用prettyPrint函数以特定格式打印警告信息
+
+    // 调用 prettyPrint 函数来格式化并显示标题、文本和警告颜色
     prettyPrint(title, text, '#F1AC6A');
 };
 
@@ -105,7 +96,7 @@ export const warning = (contentOrTitle: any, ...content: any[]): void => {
  * 如果只提供一个字符串，该字符串将同时作为标题和内容；如果提供一个对象作为内容，标题和内容将分别设置
  *
  * @param contentOrTitle 标题字符串，如果内容为空，则同时作为内容字符串
- * @param content 内容字符串或对象，默认为空字符串如果为空字符串，则内容为标题字符串
+ * @param content 可变参数，包含错误的详细信息
  */
 export const success = (contentOrTitle: any, ...content: any[]): void => {
     // 根据内容是否为空，动态设置标题和内容
