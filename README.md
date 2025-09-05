@@ -1,7 +1,7 @@
-<div align="center">
-<h1>Pretty-Log</h1>
-<h2>美化log</h2>
-</div>
+# @wb04307201/pretty-log
+
+> 一个前端工具包，用于美化控制台日志输出。它可以帮助开发者在浏览器控制台中以更清晰、更易读的格式输出日志信息。
+
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
@@ -12,7 +12,7 @@
 
 ## 使用
 ```javascript
-import * as prettyLog from '../src/index.ts'
+import * as prettyLog from '@wb04307201/pretty-log';
 
 // 信息
 prettyLog.info("Hello world!")
