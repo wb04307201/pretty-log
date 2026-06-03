@@ -29,6 +29,10 @@
     prettyLog.success("成功", "Hello world!")
     prettyLog.success("成功", "Hello world!", {a: 1, b: 2, c: 3})
 
+    // 调试
+    prettyLog.debug("调试信息")
+    prettyLog.debug("Debug", "详细调试数据", {debug: true})
+
     // 彩虹
     prettyLog.rainbow("来 左边 跟我一起画个龙在你右边 画一道彩虹")
 
@@ -41,7 +45,7 @@
     // 表格
     prettyLog.table([{a: 1, b: 1, c: 1}, {a: 2, b: 2, c: 2}, {a: 3, b: 3, c: 3}])
 
-    // 基本用法
+    // 计时器
     prettyLog.time('计时器');
     // 执行一些操作...
     setTimeout(() => {
@@ -54,6 +58,46 @@
     // json格式
     prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
     prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
+
+    // ===== 新特性演示 =====
+
+    // --- 日志级别过滤 ---
+    console.log('--- 日志级别过滤 ---')
+    prettyLog.configure({ logLevel: 'warn' })
+    prettyLog.debug('这条不会显示')   // 被过滤
+    prettyLog.info('这条也不会显示')  // 被过滤
+    prettyLog.warning('警告会显示')
+    prettyLog.error('错误会显示')
+    prettyLog.configure({ logLevel: 'debug' })  // 恢复
+
+    // --- Emoji + 时间戳 ---
+    console.log('--- Emoji + 时间戳 ---')
+    prettyLog.showEmoji(true)
+    prettyLog.showTimestamp(true)
+    prettyLog.info("带 Emoji 和时间戳")
+    prettyLog.error("错误也有 Emoji 和时间戳")
+    prettyLog.success("成功消息")
+
+    // --- 日志历史 ---
+    console.log('--- 日志历史 ---')
+    const history = prettyLog.getHistory()
+    console.log(`历史记录数量: ${history.length}`)
+    console.log('最近5条:', JSON.stringify(history.slice(-5), null, 2))
+
+    // --- 自定义主题 ---
+    console.log('--- 自定义主题 ---')
+    prettyLog.setTheme({ infoColor: '#00FF00', errorColor: '#FF0000' })
+    prettyLog.info("绿色信息")
+    prettyLog.error("红色错误")
+    prettyLog.setTheme({ infoColor: '#A6A6A6', errorColor: '#EC7270' })  // 恢复
+
+    // --- 一次性配置 ---
+    console.log('--- 一次性配置 ---')
+    prettyLog.configure({
+        showEmoji: false,
+        showTimestamp: false,
+    })
+    prettyLog.info("关闭 Emoji 和时间戳")
 </script>
 </body>
 </html>
