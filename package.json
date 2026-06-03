@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "build": "parcel build",
-    "release": "rimraf ./dist && parcel build && yarn publish --access public",
+    "release": "rimraf ./dist && parcel build && yarn publish --access public --registry https://registry.npmjs.org/",
     "test": "parcel test/test.html"
   },
   "keywords": [],
