@@ -44,7 +44,20 @@ function main() {
 
   if (errors.length > 0) {
     for (const e of errors) console.error(`[verify-tag-version] ${e}`);
-    console.error('[verify-tag-version] 已中止发布。请同步 tag 与 package.json 后重新打 tag。');
+    console.error('');
+    console.error('[verify-tag-version] 已中止发布。修复方式（二选一）：');
+    console.error(`  A. 若 ${pkg.version} 就是你想发布的版本，改 tag 名：`);
+    console.error(`       git tag -d ${tag} && git tag v${pkg.version}`);
+    console.error(`       git push origin :refs/tags/${tag} && git push origin v${pkg.version}`);
+    console.error(`     然后到 GitHub 为 v${pkg.version} 重新创建 Release。`);
+    console.error(`  B. 若 ${tagVersion ?? tag} 才是目标版本，先改 package.json 再重打 tag：`);
+    console.error(`       npm version ${tagVersion ?? '<版本>'}`);
+    console.error(`       git commit -am "chore: 版本号升至 ${tagVersion ?? '<版本>'}"`);
+    console.error(`       git push origin master && git tag -d ${tag} && git tag ${tag}`);
+    console.error(`       git push origin :refs/tags/${tag} && git push origin ${tag}`);
+    console.error('');
+    console.error('[verify-tag-version] 注意：npm 上已发布的版本号无法回收，');
+    console.error('[verify-tag-version] 请确认后再重打，避免浪费版本号。');
     process.exit(1);
   }
 
