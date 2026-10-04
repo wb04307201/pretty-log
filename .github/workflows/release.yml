@@ -20,13 +20,14 @@ name: Release
 
 on:
   release:
-    # created 与 published 都必须监听（官方 webhook 文档原文）：
-    #   Action type: created — A draft was saved, OR a release or pre-release
-    #   was published without previously being saved as a draft.
-    # 即手动创建 Release（此前非 draft）触发的是 created 而非 published。
-    # 只写 published 会导致手动发版时工作流不运行。
-    # published 用于覆盖"先存 draft 再发布"的路径。
-    types: [created, published]
+    # 只监听 created。
+    # GitHub 对「创建一个此前非 draft 的 Release」会推送两条事件：created 与
+    # published（官方文档：Action type: created — A draft was saved, or a release
+    # or pre-release was published without previously being saved as a draft）。
+    # 同时监听两者会让一次手动发版跑两遍（实测 actions/runs 出现两条同秒记录）。
+    # created 已覆盖手动发布这一主路径；published 仅在「先存 draft 再发布」时出现，
+    # 那种场景下 created 也已经先触发过了，故无需重复监听。
+    types: [created]
 
 # 不需要写权限：本工作流只发布 npm，不推送任何分支或 tag
 permissions:
