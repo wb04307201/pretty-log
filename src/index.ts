@@ -43,12 +43,35 @@ const DEFAULT_THEME: Theme = {
 /**
  * 日志条目，用于历史记录
  */
-interface LogEntry {
+export interface LogEntry {
   level: LogLevel;
   timestamp: number;
   title: string;
   content: LogContent[];
 }
+
+/**
+ * 默认历史容量
+ */
+const DEFAULT_HISTORY_SIZE = 200;
+
+/**
+ * 归一化历史容量输入，非法值回退到默认容量
+ *
+ * `new Array(n)` 对负数、小数、NaN、Infinity 都会抛 RangeError，
+ * 而公开 API 接受任意 number（含来自环境变量的字符串转换结果），
+ * 因此必须在入口处夹紧并取整，而不是让异常逃逸到调用方。
+ *
+ * @param size 调用方传入的容量
+ * @returns 合法容量：0（禁用）或正整数
+ */
+const normalizeHistorySize = (size: number): number => {
+  // 非有限值（NaN / Infinity / -Infinity）无法取整，直接回退默认
+  if (!Number.isFinite(size)) return DEFAULT_HISTORY_SIZE;
+  const floored = Math.floor(size);
+  // 负数与小数归零：0 是文档承诺的"禁用"语义，不应抛错
+  return floored > 0 ? floored : 0;
+};
 
 /**
  * 固定大小循环缓冲区，用于日志历史
@@ -89,6 +112,28 @@ class HistoryBuffer {
     this.count = 0;
   }
 
+  /**
+   * 调整容量并保留现有条目（按时间顺序保留最近的）
+   */
+  resize(capacity: number): void {
+    if (capacity === this.size) return;
+
+    // 先按顺序取出旧条目，避免重建时丢失数据
+    const existing = this.get();
+    this.size = capacity;
+    this.buffer = new Array(capacity).fill(null);
+    this.head = 0;
+    this.count = 0;
+
+    // 容量为 0 表示禁用历史
+    if (capacity === 0) return;
+
+    // 容量变小时只保留最近的 capacity 条
+    for (const entry of existing.slice(-capacity)) {
+      this.push(entry);
+    }
+  }
+
   get length(): number {
     return this.count;
   }
@@ -102,7 +147,7 @@ class ConfigManager {
   private _theme: Theme = { ...DEFAULT_THEME };
   private _showEmoji: boolean = false;
   private _showTimestamp: boolean = false;
-  private _historySize: number = 200;
+  private _historySize: number = DEFAULT_HISTORY_SIZE;
   private _history: HistoryBuffer;
 
   constructor() {
@@ -142,8 +187,9 @@ class ConfigManager {
   }
 
   set historySize(size: number) {
-    this._historySize = size;
-    this._history = new HistoryBuffer(size);
+    const normalized = normalizeHistorySize(size);
+    this._historySize = normalized;
+    this._history.resize(normalized);
   }
 
   /**
@@ -182,26 +228,108 @@ class ConfigManager {
 const config = new ConfigManager();
 
 /**
+ * 构造 JSON.stringify 的 replacer，正确区分「循环引用」与「共享引用」
+ *
+ * 原实现用 WeakSet 记录「访问过的所有对象」，于是同一对象被引用两次
+ * （DAG，非循环）也会被误标成 `[Circular]` —— 日志失真。
+ *
+ * 正确做法是维护「当前祖先链」栈：只有当 value 仍在自己的祖先栈上时才算循环。
+ * replacer 以 `this` 持有当前持有者，回溯时把栈顶直到等于 `this` 的部分弹出，
+ * 剩下的栈恰好就是从根到当前的路径；重复出现的兄弟节点不在栈上，会被正常打印。
+ */
+const jsonReplacer = (): ((this: unknown, key: string, value: unknown) => unknown) => {
+  // 祖先链：序列化过程中按进入顺序维护的路径栈
+  const ancestors: unknown[] = [];
+
+  return function (this: unknown, key: string, value: unknown): unknown {
+    // Date 必须在此拦截，且必须在下面的基本类型早退之前：
+    // JSON.stringify 会先调用 value.toJSON() 再把结果交给 replacer，
+    // 此刻 value 已是 ISO 字符串（非 object），若先做 typeof 判断会直接返回，永远走不到下面。
+    // replacer 的 this 是持有者，this[key] 仍指向原始 Date，据此取回再格式化。
+    if (this !== null && typeof this === 'object') {
+      const original = (this as Record<string, unknown>)[key];
+      if (original instanceof Date) {
+        return Number.isNaN(original.getTime()) ? 'Invalid Date' : original.toLocaleString();
+      }
+    }
+
+    // 基本类型与 null 直接返回，无需入栈
+    if (typeof value !== 'object' || value === null) return value;
+
+    // Map / Set 没有序列化协议，放任其进入必然输出 {}，故在此拦截。
+    // 顶层与嵌套共用本 replacer，故一次修好两处。
+    if (value instanceof Map) return formatMap(value);
+    if (value instanceof Set) return formatSet(value);
+
+    // 弹出比当前持有者更深的栈帧，剩下的即当前祖先链
+    while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+      ancestors.pop();
+    }
+
+    // 命中祖先链 → 真正的循环引用
+    if (ancestors.includes(value)) return '[Circular]';
+
+    ancestors.push(value);
+    return value;
+  };
+};
+
+/**
+ * 展开 Map 为可读的对象表示
+ *
+ * `JSON.stringify` 对 Map / Set 一律输出 `{}`，必须手工展开。
+ * 键经 stringify 处理（对象键会变成其字符串表示），值原样保留，
+ * 以便嵌套对象仍按 JSON 结构展开而非被提前拍平成字符串。
+ */
+const formatMap = (map: Map<unknown, unknown>): Record<string, LogContent> => {
+  const result: Record<string, LogContent> = {};
+  let index = 0;
+  for (const [key, value] of map) {
+    const name = typeof key === 'object' && key !== null ? stringify(key) : String(key);
+    result[name || `entry${index}`] = value as LogContent;
+    index++;
+  }
+  return result;
+};
+
+/**
+ * 展开 Set 为数组表示
+ */
+const formatSet = (set: Set<unknown>): unknown[] => {
+  const result: unknown[] = [];
+  for (const value of set) result.push(value);
+  return result;
+};
+
+/**
  * 将值转换为字符串表示形式
  *
  * @param value - 需要转换的值，可以是任意类型
  * @returns {string} 字符串形式的值
  *
  * 转换规则：
- * - 如果值是对象类型（不包括null），则转换为JSON字符串，使用 WeakSet 处理循环引用
- * - 否则，使用String()函数转换为字符串
+ * - Error → 打印 message 与 stack（否则 JSON 序列化得到空对象，堆栈完全丢失）
+ * - Map / Set → 手工展开为对象 / 数组（否则同样是空对象）
+ * - Date → 本地可读时间（toJSON 会退化成难以阅读的 ISO 串）
+ * - 其他对象 → JSON 字符串，用「祖先链」检测真正的循环引用
+ * - 否则 → String()
  */
 const stringify = (value: LogContent): string => {
   try {
+    if (value instanceof Error) {
+      return value.stack ? String(value.stack) : `${value.name}: ${value.message}`;
+    }
+    if (value instanceof Map) {
+      return JSON.stringify(formatMap(value), jsonReplacer());
+    }
+    if (value instanceof Set) {
+      return JSON.stringify(formatSet(value), jsonReplacer());
+    }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? 'Invalid Date' : value.toLocaleString();
+    }
     if (typeof value === 'object' && value !== null) {
-      const seen = new WeakSet();
-      return JSON.stringify(value, (_, v) => {
-        if (typeof v === 'object' && v !== null) {
-          if (seen.has(v)) return '[Circular]';
-          seen.add(v);
-        }
-        return v;
-      });
+      return JSON.stringify(value, jsonReplacer()) ?? String(value);
     }
     return String(value);
   } catch {
@@ -298,13 +426,18 @@ const prettyPrint = (
 
 /**
  * 日志工厂函数，消除 info/error/warning/success/debug 的重复代码
+ *
+ * @param defaultTitle 默认标题（单参数调用时使用）
+ * @param colorKey 主题颜色字段名。传字段名而非色值字符串，使颜色在**打印时**
+ *   现查 config.theme —— 若在模块加载时把色值捕获进闭包，setTheme 将完全失效。
+ *   theme 中不存在该字段时回退到 fallbackColor，保证主题被清空也不会丢色。
  */
 const makeLogger =
-  (defaultTitle: string, color: string, level: LogLevel) =>
+  (defaultTitle: string, colorKey: keyof Theme, fallbackColor: string, level: LogLevel) =>
   (contentOrTitle: LogContent, ...content: LogContent[]): void => {
     const title = content.length === 0 ? defaultTitle : stringify(contentOrTitle);
     const text = content.length === 0 ? [contentOrTitle] : content;
-    prettyPrint(title, text, color, level);
+    prettyPrint(title, text, config.theme[colorKey] ?? fallbackColor, level);
   };
 
 /**
@@ -313,7 +446,7 @@ const makeLogger =
  * @param contentOrTitle 内容或标题，具体取决于后续内容参数的数量
  * @param content 可变参数，包含调试的详细信息
  */
-export const debug = makeLogger('Debug', '#5BC0EB', 'debug');
+export const debug = makeLogger('Debug', 'debugColor', '#5BC0EB', 'debug');
 
 /**
  * 输出信息框
@@ -324,7 +457,7 @@ export const debug = makeLogger('Debug', '#5BC0EB', 'debug');
  * @param contentOrTitle 内容或标题，具体取决于后续内容参数的数量
  * @param content 可变参数，包含信息的详细内容
  */
-export const info = makeLogger('Info', '#A6A6A6', 'info');
+export const info = makeLogger('Info', 'infoColor', '#A6A6A6', 'info');
 
 /**
  * 输出错误信息的函数
@@ -336,7 +469,7 @@ export const info = makeLogger('Info', '#A6A6A6', 'info');
  * @param contentOrTitle 错误的标题或内容，根据传入的参数数量决定其作用
  * @param content 可变参数，包含错误的详细信息
  */
-export const error = makeLogger('Error', '#EC7270', 'error');
+export const error = makeLogger('Error', 'errorColor', '#EC7270', 'error');
 
 /**
  * 显示警告信息。
@@ -347,7 +480,7 @@ export const error = makeLogger('Error', '#EC7270', 'error');
  * @param contentOrTitle 第一个消息参数，如果没有其他消息参数，则作为标题。
  * @param content 可变参数，包含警告的详细信息
  */
-export const warning = makeLogger('Warning', '#F1AC6A', 'warn');
+export const warning = makeLogger('Warning', 'warningColor', '#F1AC6A', 'warn');
 
 /**
  * 显示成功信息。
@@ -358,7 +491,7 @@ export const warning = makeLogger('Warning', '#F1AC6A', 'warn');
  * @param contentOrTitle 标题字符串，如果内容为空，则同时作为内容字符串
  * @param content 可变参数，包含成功的详细信息
  */
-export const success = makeLogger('Success', '#95DA69', 'info');
+export const success = makeLogger('Success', 'successColor', '#95DA69', 'info');
 
 /**
  * 在控制台打印彩虹色文本
