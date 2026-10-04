@@ -104,6 +104,48 @@
         showTimestamp: false,
     })
     prettyLog.info("关闭 Emoji 和时间戳")
+
+    // ===== 新增功能演示 =====
+
+    // --- 异步计时器（异常路径也会结束计时） ---
+    console.log('--- timer 异步计时 ---')
+    prettyLog.timer('fetch-用户数据', () =>
+        new Promise((resolve) => setTimeout(() => resolve('done'), 300))
+    )
+
+    // --- 只输出一次 ---
+    console.log('--- once 只输出一次 ---')
+    for (let i = 0; i < 5; i++) {
+        prettyLog.once('render-once', '这条只会出现一次', `第 ${i} 次调用被忽略`)
+    }
+
+    // --- 调用计数 ---
+    console.log('--- count 调用计数 ---')
+    ;['api-a', 'api-a', 'api-b'].forEach((k) => prettyLog.count(k))
+    console.log('调用统计:', JSON.stringify(prettyLog.countSummary()))
+    prettyLog.clearCounters()
+
+    // --- 带前缀的 logger ---
+    console.log('--- withPrefix 前缀 logger ---')
+    const userLog = prettyLog.withPrefix('用户模块')
+    userLog.info('登录成功', { userId: 123 })
+    userLog.warning('昵称已存在', '将自动追加数字后缀')
+
+    // --- 断言（失败会抛出，正常流程请勿触发） ---
+    console.log('--- assert 断言 ---')
+    prettyLog.assert(1 + 1 === 2, '数学基本定理')
+    console.log('断言通过，未抛出')
+
+    // --- 自定义样式 ---
+    console.log('--- setStyles 自定义样式 ---')
+    prettyLog.setStyles({ borderRadius: '8px', padding: '3px 10px' })
+    prettyLog.info("圆角和内边距已改变")
+    prettyLog.setStyles({ borderRadius: undefined, padding: undefined })  // 恢复默认
+
+    // --- 格式串注入防护 ---
+    console.log('--- 百分号转义 ---')
+    prettyLog.info("注入测试", "这里有 %c 和 %s，应该原样显示")
+    prettyLog.info("百分号", "完成 50%")
 </script>
 </body>
 </html>
