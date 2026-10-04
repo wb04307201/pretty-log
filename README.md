@@ -114,12 +114,77 @@ prettyLog.configure({
 const history = prettyLog.getHistory();
 console.log(JSON.stringify(history, null, 2));
 
-// Adjust history size (set to 0 to disable)
+// Adjust history size (set to 0 to disable).
+// Illegal values are clamped rather than throwing, and existing
+// entries are preserved (most recent kept when shrinking).
 prettyLog.setHistorySize(500);
 
 // Clear history
 prettyLog.clearHistory();
 ```
+
+### Async Timer
+`timer` ends the timer on both the resolve and the throw/reject path, and never swallows the original error.
+```javascript
+// Sync work — logs immediately
+const result = prettyLog.timer('parse', () => JSON.parse(raw));
+
+// Async work — logs when the promise settles
+await prettyLog.timer('fetch-user', () => fetch('/api/user').then(r => r.json()));
+
+// Errors still end the timer and propagate to your caller
+await prettyLog.timer('risky', () => Promise.reject(new Error('boom')));
+```
+
+### Log Once
+Useful for debug logs inside loops — the same key prints only once.
+```javascript
+for (const item of items) {
+  prettyLog.once('render', 'Component rendered', item.id);
+}
+
+prettyLog.clearOnce();  // allow all keys again
+```
+
+### Call Counting
+```javascript
+items.forEach(i => prettyLog.count('api-call'));
+
+console.log(prettyLog.countSummary());  // { 'api-call': 42 }
+prettyLog.clearCounters();
+```
+
+### Prefixed Logger
+Returns loggers that carry a fixed prefix while keeping the same level, theme and filtering.
+```javascript
+const userLog = prettyLog.withPrefix('用户模块');
+userLog.info('登录成功', { userId: 123 });
+// [用户模块] 登录成功
+// {"userId":123}
+```
+
+### Assertions
+Stays silent when the condition holds; on failure it logs via `console.error` (highlighted red in DevTools) and throws.
+```javascript
+prettyLog.assert(user != null, 'user must not be null');
+```
+
+### Custom Styles
+```javascript
+prettyLog.setStyles({ borderRadius: '8px', padding: '3px 10px' });
+
+// Pass undefined to restore a default
+prettyLog.setStyles({ borderRadius: undefined });
+```
+
+### Production Strip
+Every logging API becomes a silent no-op when `NODE_ENV=production`, so debug calls can stay in the source without polluting production bundles.
+```javascript
+// In production this prints nothing
+prettyLog.info('this never shows up');
+```
+
+Note: `timer` still runs the function you give it in production — only the logging is suppressed.
 
 ## Output
 ![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)
