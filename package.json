@@ -2,7 +2,7 @@
   "name": "@wb04307201/pretty-log",
   "description": "A frontend toolkit for beautifying console log output. It helps developers display log information in a cleaner, more readable format in the browser console.",
   "private": false,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": "src/index.ts",
   "main": "dist/main.js",
   "module": "dist/module.js",
