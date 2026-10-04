@@ -90,9 +90,20 @@ jobs:
         # 用 offline 变体：它排除需要访问 npm registry 的用例
         # （ci-publish.test.js）。那些用例验的是 npm 的可用性而非本仓代码，
         # CI 网络受限时不应阻塞发布。本地想跑全量用 yarn test:unit。
+        #
+        # 失败时把完整输出写进 job summary：GitHub 的 logs 接口需要仓库管理员
+        # 权限才能读取，外部排查者拿不到，而 summary 对所有有仓库访问权的人可见。
         run: |
-          echo "Node: $(node -v) / npm: $(npm -v)"
-          yarn test:unit:offline
+          echo "Node: $(node -v) / npm: $(npm -v) / yarn: $(yarn -v)"
+          set +e
+          yarn test:unit:offline > /tmp/test-output.txt 2>&1
+          code=$?
+          set -e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/test-output.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/test-output.txt
+          exit $code
 
       - name: 类型检查
         run: npx tsc --noEmit
