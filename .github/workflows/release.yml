@@ -1,12 +1,15 @@
-# tag 驱动的自动发布到 npm
+# 由 GitHub Release 驱动的 npm 发布
 #
-# 触发条件：推送形如 v1.2.3 的 tag（v* 通配）。
-#
-# 链路：你本地 → Gitee（打 tag）→ Gitee 镜像同步该 tag 到 GitHub
+# 链路：你本地 → Gitee 打 tag → Gitee 镜像同步该 tag 到 GitHub
+#         → 你在 GitHub 上创建 Release（选择该 tag）
 #         → 本工作流被触发 → 发布到 npm
 #
-# 因此**不需要** GITEE_TOKEN：Gitee → GitHub 的同步由 Gitee 仓库的镜像
-# 设置负责，CI 只负责"被触发后做发布"，不回写任何分支。
+# 为什么用 release 事件而不是 push tag：
+# Gitee 镜像同步 tag 时走的是 GitHub API 写 ref，并非真实 git push，
+# 因此不会产生 `push` 事件（实测 API 查询 actions/runs 返回
+# total_count: 0，尽管 tag 与分支均已同步到位）。
+# 而手动创建 Release 是一个真实的用户动作，会产生 `release` 事件，
+# 其 GITHUB_REF 为 refs/tags/<tag_name>，正好提供校验所需的 tag 名。
 #
 # 需要配置的仓库 Secret：
 #   NPM_TOKEN  npm 的 automation token（建议 granular 且仅限本包）
@@ -16,11 +19,16 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    # created 与 published 都必须监听（官方 webhook 文档原文）：
+    #   Action type: created — A draft was saved, OR a release or pre-release
+    #   was published without previously being saved as a draft.
+    # 即手动创建 Release（此前非 draft）触发的是 created 而非 published。
+    # 只写 published 会导致手动发版时工作流不运行。
+    # published 用于覆盖"先存 draft 再发布"的路径。
+    types: [created, published]
 
-# 不需要写权限：本工作流只发布 npm，不推送任何分支
+# 不需要写权限：本工作流只发布 npm，不推送任何分支或 tag
 permissions:
   contents: read
 
@@ -34,9 +42,11 @@ jobs:
     name: 发布到 npm
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: 检出被 release 的 tag
         uses: actions/checkout@v4
         with:
+          # release 事件的 ref 形如 refs/tags/v1.2.3，取其 tag 名显式检出
+          ref: ${{ github.ref }}
           # 需要完整 tag 信息供版本校验使用
           fetch-depth: 0
 
@@ -45,6 +55,26 @@ jobs:
 
       - name: 校验 tag 与 package.json 版本一致
         run: node scripts/verify-tag-version.js "${{ github.ref_name }}"
+
+      - name: 检查该版本是否已发布（幂等保护）
+        # release 事件监听 created + published 两条路径：若先存 draft 再发布，
+        # 同一次发版可能被触发两次。npm 版本号无法覆盖，故先查一次，
+        # 已发布则以 exit 0 优雅跳过而非让第二次发布失败。
+        # 脚本约定：0=已发布(跳过) 1=未发布(继续) 2=检查失败(中止)
+        run: |
+          set +e
+          node scripts/check-version-published.js "${{ github.ref_name }}"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "版本已发布，跳过本次 npm 发布"
+            exit 0
+          elif [ "$code" -eq 1 ]; then
+            echo "版本未发布，继续"
+          else
+            echo "::error::无法确认版本发布状态，中止"
+            exit 1
+          fi
 
       - name: 单元测试
         run: yarn test:unit
