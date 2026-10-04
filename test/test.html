@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>美化log</title>
+    <link rel="stylesheet" href="./console-panel.css">
 </head>
 <body>
-<h1>请打开开发者工具并查看控制台</h1>
 <script type="module">
+    // 必须最先安装面板，才能捕获后续所有日志
+    import { installConsolePanel } from './console-panel.js'
+    installConsolePanel()
+
     import * as prettyLog from '../src/index.ts'
 
     // 本地样图：内联为 data URI，彻底不依赖网络与打包器的静态资源管线。

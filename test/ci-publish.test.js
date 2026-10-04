@@ -16,7 +16,6 @@ import { execFileSync } from 'node:child_process'
 const require = createRequire(import.meta.url)
 const here = path.dirname(fileURLToPath(import.meta.url))
 const script = path.join(here, '..', 'scripts', 'check-version-published.js')
-const pkg = require('../package.json')
 
 /** 执行脚本，返回 { code, out }；code 为退出码 */
 function run(version) {
@@ -35,8 +34,10 @@ test('缺少版本参数时中止（exit 2）', () => {
 })
 
 test('已发布的版本应跳过（exit 0）', { timeout: 60000 }, () => {
-  // package.json 里的版本在 npm 上确实存在（1.0.0）
-  const r = run(pkg.version)
+  // 刻意用硬编码的 1.0.0 而非 pkg.version —— pkg.version 是待发布的版本，
+  // 在真正 publish 之前它当然"未发布"，用当前版本会让本用例在发版前后
+  // 表现相反，失去回归价值。1.0.0 已确定发布过。
+  const r = run('1.0.0')
   assert.equal(r.code, 0, `已发布版本应返回 0 以跳过，实际输出：${r.out}`)
   assert.ok(r.out.includes('已发布'), `应报告已发布，实际：${r.out}`)
 })

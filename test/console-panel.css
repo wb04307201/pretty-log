@@ -1,0 +1,172 @@
+/* console 面板样式
+ *
+ * 关键点：日志片段必须用 inline-block —— 只有 inline-block 才能让
+ * padding / border / background-image 生效，picture() 打印的图片正是
+ * 靠 font-size:1px + padding + background-image 实现的。
+ */
+
+/* 默认占满整个视口 —— 测试页的唯一目的就是看日志，
+   任何标题、说明文字都是干扰。面板自己带工具栏即可。 */
+body.has-console-panel {
+  margin: 0;
+  padding: 0;
+}
+
+#console-panel {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #202124;
+  color: #e8eaed;
+  border-top: 1px solid #3c4043;
+  /* 字体栈必须同时兜住三类字形：
+     1. 中文 —— Consolas 等宽字体没有 CJK 字形，中文会显示成横线
+     2. Emoji —— 同理，emoji 会显示成占位方框
+     3. ASCII —— 前置 Consolas 保证代码对齐
+     中文放在 emoji 之前，避免被后面的 emoji 字体抢占。 */
+  font: 12px/1.5 Consolas, 'Cascadia Mono', 'Courier New', 'Microsoft YaHei',
+    'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI Emoji', 'Noto Color Emoji',
+    monospace;
+  z-index: 1000;
+}
+
+/* 收起时只留工具栏一条 */
+#console-panel.is-minimized {
+  inset: auto 0 0 0;
+  height: auto;
+}
+
+#console-panel.is-minimized #console-output {
+  display: none;
+}
+
+/* 半屏模式 */
+#console-panel.is-half {
+  inset: auto 0 0 0;
+  height: 50vh;
+}
+
+#console-panel header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  background: #292a2d;
+  border-bottom: 1px solid #3c4043;
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#console-panel .pl-count {
+  color: #9aa0a6;
+  font-weight: normal;
+}
+
+.pl-btn {
+  background: #3c4043;
+  color: #e8eaed;
+  border: 1px solid #5f6368;
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pl-btn:hover {
+  background: #4a4d51;
+}
+
+#console-output {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
+/* 每条日志一行 */
+.pl-row {
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.pl-row .pl-seg {
+  display: inline-block;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+/* 各方法的左侧标记颜色，与 DevTools 习惯一致 */
+.pl-row::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+}
+
+.pl-warn::before {
+  border-left: 3px solid #f9ac6a;
+  margin-right: 6px;
+}
+
+.pl-error::before {
+  border-left: 3px solid #ec7270;
+  margin-right: 6px;
+}
+
+.pl-debug::before {
+  border-left: 3px solid #5bc0eb;
+  margin-right: 6px;
+}
+
+/* 分组 */
+.pl-group {
+  margin: 4px 0;
+}
+
+.pl-group-head {
+  cursor: pointer;
+  font-weight: bold;
+  user-select: none;
+}
+
+.pl-group-head::before {
+  content: '▾ ';
+  color: #9aa0a6;
+}
+
+.pl-group-body {
+  padding-left: 14px;
+  border-left: 2px solid #3c4043;
+  margin-left: 4px;
+}
+
+/* 表格 */
+.pl-table-wrap {
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+table.pl-table {
+  border-collapse: collapse;
+  font: inherit;
+}
+
+table.pl-table th,
+table.pl-table td {
+  border: 1px solid #3c4043;
+  padding: 3px 8px;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+table.pl-table th {
+  background: #292a2d;
+  color: #9aa0a6;
+  font-weight: normal;
+}
+
+table.pl-table td.pl-idx {
+  color: #9aa0a6;
+  text-align: right;
+}
