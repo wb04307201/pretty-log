@@ -1,8 +1,10 @@
 # 发布流程
 
-本项目采用 **git tag 驱动的自动发布**：在 Gitee 打一个形如 `v1.2.3` 的 tag，
-Gitee 的镜像设置会把它同步到 GitHub，GitHub Actions 随即自动完成
-校验、测试、构建、发布到 npm。
+本项目采用 **GitHub Release 驱动的自动发布**：
+
+在 Gitee 打一个形如 `v1.2.3` 的 tag → Gitee 镜像把它同步到 GitHub →
+你在 GitHub 上为该 tag 创建一个 Release → Actions 自动完成校验、测试、
+构建、发布到 npm。
 
 ---
 
@@ -46,7 +48,7 @@ git merge dev          # 或走 Gitee 的 PR 流程
 yarn install
 yarn test:unit
 
-# 3. 更新版本号
+# 3. 更新版本号（必须在打 tag 之前，否则校验会中止）
 npm version patch       # 1.0.0 → 1.0.1（也可用 minor / major）
 
 # 4. 推到 Gitee 并打 tag
@@ -55,7 +57,14 @@ git tag v1.0.1
 git push origin v1.0.1
 ```
 
-`git push origin v1.0.1` 之后，Gitee 镜像会把 tag 同步到 GitHub，
+然后在 GitHub 上操作：
+
+1. 进入仓库的 **Releases** 页面
+2. 点 **Draft a new release**
+3. **Choose a tag** → 选 `v1.0.1`（镜像已同步过来，能选到）
+4. 填标题、说明
+5. 点 **Publish release**
+
 Actions 随之自动执行：
 
 1. `verify-tag-version` 校验 tag 与 `package.json` 版本一致（不一致则中止）
@@ -81,6 +90,36 @@ yarn verify:tag v1.2.0
 ```
 
 ---
+
+## 为什么用 Release 事件而不是 tag push
+
+直觉上应该监听 `push: tags`，但**在本仓库的链路上行不通**：
+
+Gitee 镜像同步 tag 时走的是 GitHub API 写 ref，并非一次真实的 git push，
+因此不产生 `push` 事件。实测：tag 与分支均已同步到 GitHub（`git ls-remote`
+能查到 `v1.0.1`），但 GitHub API 查询 `actions/runs` 返回 `total_count: 0`
+—— 仓库从未跑过任何 Actions。
+
+而"创建 Release"是一个真实用户动作，会产生 `release` 事件，
+且其 `GITHUB_REF` 为 `refs/tags/<tag_name>`，正好提供版本校验所需的 tag 名。
+
+### 注意 created 而非 published
+
+workflow 同时监听 `created` 与 `published`：
+
+- 手动创建 Release（此前不是 draft）触发的是 **`created`**
+- 先存 draft 再发布触发的是 `published`
+
+（依据 GitHub 官方 webhook 文档：*Action type: created — A draft was saved,
+or a release or pre-release was published without previously being saved as a draft.*）
+
+只写 `types: [published]` 会导致手动发版时工作流不运行。
+
+### 幂等保护
+
+因为监听了两条路径，先存 draft 再发布时同一次发版可能被触发两次。
+`check-version-published.js` 会在发布前查一次 npm：已发布则跳过并正常退出，
+避免第二次发布因版本号冲突而失败。
 
 ## 关于同步方向
 
