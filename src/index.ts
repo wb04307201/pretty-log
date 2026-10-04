@@ -41,6 +41,36 @@ const DEFAULT_THEME: Theme = {
 };
 
 /**
+ * 日志框样式配置
+ *
+ * 此前样式字符串硬编码在 prettyPrint 中，用户无法调整圆角与内边距。
+ * 每项均可传 undefined 恢复默认值。
+ */
+export interface Styles {
+  /** 圆角，默认 '2px' */
+  borderRadius?: string;
+  /** 内边距，默认 '1px' */
+  padding?: string;
+  /** 标题文字颜色，默认 '#fff' */
+  titleColor?: string;
+  /** 边框宽度，默认 '1px' */
+  borderWidth?: string;
+  /** 边框样式，默认 'solid' */
+  borderStyle?: string;
+}
+
+/**
+ * 默认样式
+ */
+const DEFAULT_STYLES: Required<Styles> = {
+  borderRadius: '2px',
+  padding: '1px',
+  titleColor: '#fff',
+  borderWidth: '1px',
+  borderStyle: 'solid',
+};
+
+/**
  * 日志条目，用于历史记录
  */
 export interface LogEntry {
@@ -145,6 +175,7 @@ class HistoryBuffer {
 class ConfigManager {
   private _logLevel: LogLevel = 'debug';
   private _theme: Theme = { ...DEFAULT_THEME };
+  private _styles: Required<Styles> = { ...DEFAULT_STYLES };
   private _showEmoji: boolean = false;
   private _showTimestamp: boolean = false;
   private _historySize: number = DEFAULT_HISTORY_SIZE;
@@ -152,6 +183,24 @@ class ConfigManager {
 
   constructor() {
     this._history = new HistoryBuffer(this._historySize);
+  }
+
+  /**
+   * 构建日志框的 CSS 样式
+   *
+   * @param color 边框/背景色
+   * @param isTitle true 为标题样式（带背景），false 为内容样式（仅边框）
+   */
+  buildBoxStyle(color: string, isTitle: boolean): string {
+    const s = this._styles;
+    const border = `${s.borderWidth} ${s.borderStyle} ${color}`;
+    return isTitle
+      ? `background:${color};border:${border}; padding: ${s.padding}; border-radius: ${s.borderRadius}; color: ${s.titleColor};`
+      : `border:${border}; padding: ${s.padding}; border-radius: ${s.borderRadius}; color: ${color};`;
+  }
+
+  get styles(): Required<Styles> {
+    return { ...this._styles };
   }
 
   get logLevel(): LogLevel {
@@ -164,6 +213,16 @@ class ConfigManager {
 
   get theme(): Theme {
     return { ...this._theme };
+  }
+
+  /**
+   * 合并部分样式覆盖，值为 undefined 的项恢复默认
+   */
+  applyStyles(partial: Partial<Styles>): void {
+    for (const key of Object.keys(partial) as (keyof Styles)[]) {
+      const value = partial[key];
+      this._styles[key] = value === undefined ? DEFAULT_STYLES[key] : value;
+    }
   }
 
   get showEmoji(): boolean {
@@ -223,6 +282,20 @@ class ConfigManager {
     this._history.clear();
   }
 }
+
+/**
+ * 生产环境判定
+ *
+ * 浏览器与 Node 下读取方式不同：打包器通常把 process.env.NODE_ENV
+ * 静态替换为字面量（便于 tree-shaking），但本库不依赖 @types/node，
+ * 故用局部声明而非直接引用全局 process 类型。
+ */
+declare const process: { env?: Record<string, string | undefined> } | undefined;
+
+const IS_PRODUCTION: boolean =
+  typeof process !== 'undefined' &&
+  process.env !== undefined &&
+  process.env.NODE_ENV === 'production';
 
 // 全局配置实例
 const config = new ConfigManager();
@@ -338,14 +411,37 @@ const stringify = (value: LogContent): string => {
 };
 
 /**
+ * 转义 console 格式串中的百分号
+ *
+ * 日志内容会被拼进 `%c` 模板串，用户内容里的 `%c` / `%s` 会被浏览器
+ * 当作格式符解析：多消耗 CSS 实参导致样式整体错位，末尾的 `%s` 也会
+ * 被前面的 `%c` 吃掉。把 `%` 转义为 `%%` 即可，内容原样显示。
+ *
+ * @param text 已 stringify 的日志内容
+ * @returns 转义后的内容
+ */
+const escapeFormat = (text: string): string => text.replace(/%/g, '%%');
+
+/**
  * Emoji 前缀映射
+ *
+ * 键为 LogLevel（'debug' | 'info' | 'warn' | 'error' | 'none'）。
+ * 早期版本误用 'warning' 作为键，而 warning 日志实际传的是 'warn'，
+ * 导致警告永远取不到 emoji；group/time/rainbow 复用 'info' 也取不到
+ * 各自的专属 emoji，故这里额外提供按场景查表的辅助函数。
  */
 const EMOJI_MAP: Record<string, string> = {
   debug: '🐛',
   info: 'ℹ️',
   error: '❌',
-  warning: '⚠️',
+  warn: '⚠️',
   success: '✅',
+};
+
+/**
+ * 场景专属 emoji（group / time / rainbow 复用 info 级别，故单独映射）
+ */
+const CONTEXT_EMOJI_MAP: Record<string, string> = {
   group: '📦',
   time: '⏱️',
   rainbow: '🌈',
@@ -365,11 +461,15 @@ const getTimestamp = (): string => {
 
 /**
  * 构建标题前缀
+ *
+ * @param level 日志级别，决定基础 emoji
+ * @param context 场景标识（group/time/rainbow），命中时优先使用场景专属 emoji
  */
-const buildTitlePrefix = (level: LogLevel): string => {
+const buildTitlePrefix = (level: LogLevel, context?: string): string => {
   let prefix = '';
   if (config.showEmoji) {
-    prefix += `${EMOJI_MAP[level] || ''} `;
+    const emoji = (context && CONTEXT_EMOJI_MAP[context]) || EMOJI_MAP[level] || '';
+    prefix += `${emoji} `;
   }
   if (config.showTimestamp) {
     prefix += `[${getTimestamp()}] `;
@@ -378,39 +478,63 @@ const buildTitlePrefix = (level: LogLevel): string => {
 };
 
 /**
+ * 快照日志内容，避免 history 钉住调用方的活引用
+ *
+ * 直接存原对象/数组时，调用方之后的修改会反映到历史里，
+ * 且 200 条缓冲可能长期钉住大对象图无法回收。
+ *
+ * @param text 原始内容数组
+ * @returns 可安全长期持有的浅快照（对象/数组递归复制，其余原样）
+ */
+const snapshotContent = (text: LogContent[]): LogContent[] => {
+  return text.map((item) => {
+    if (item instanceof Error || item instanceof Date || item instanceof Map || item instanceof Set) {
+      // 这些类型语义上需要保持实例身份（stack / 时间 / 键值），按引用保留
+      return item;
+    }
+    if (Array.isArray(item)) return item.slice();
+    if (typeof item === 'object' && item !== null) return { ...item };
+    return item;
+  });
+};
+
+/**
  * 格式化打印控制台日志
  * @param title 日志标题
  * @param text 日志内容数组
  * @param color 日志的显示颜色
  * @param level 日志级别，用于级别过滤和历史记录
+ * @param context 场景标识，用于选择专属 emoji
  */
 const prettyPrint = (
   title: string,
   text: LogContent[],
   color: string,
-  level: LogLevel = 'info'
+  level: LogLevel = 'info',
+  context?: string
 ): void => {
   // 检查日志级别
   if (!config.shouldLog(level)) return;
 
-  const titlePrefix = buildTitlePrefix(level);
-  const titledTitle = titlePrefix + title;
+  const titlePrefix = buildTitlePrefix(level, context);
+  const titledTitle = escapeFormat(titlePrefix + title);
 
   // 初始化内容字符串，以包含标题
   let content = `%c ${titledTitle} `;
   // 遍历文本数组，格式化每个元素并添加到内容字符串中
   for (const item of text) {
-    const formattedText = stringify(item);
+    // 内容需转义百分号，否则用户数据里的 %c/%s 会被浏览器当作格式符解析
+    const formattedText = escapeFormat(stringify(item));
     content = content + `\n%c ${formattedText} `;
   }
   // 初始化日志数组，用于存储格式化后的日志内容和样式
   const logs: string[] = [];
   // 将内容和标题的样式添加到日志数组中
   logs.push(content);
-  logs.push(`background:${color};border:1px solid ${color}; padding: 1px; border-radius: 2px; color: #fff;`);
+  logs.push(config.buildBoxStyle(color, true));
   // 遍历文本数组，为每个元素添加相应的样式到日志数组中
   for (const item of text) {
-    logs.push(`border:1px solid ${color}; padding: 1px; border-radius: 2px; color: ${color};`);
+    logs.push(config.buildBoxStyle(color, false));
   }
   // 输出格式化后的日志到控制台
   console.log(...logs);
@@ -420,7 +544,7 @@ const prettyPrint = (
     level,
     timestamp: Date.now(),
     title,
-    content: [...text],
+    content: snapshotContent(text),
   });
 };
 
@@ -435,10 +559,44 @@ const prettyPrint = (
 const makeLogger =
   (defaultTitle: string, colorKey: keyof Theme, fallbackColor: string, level: LogLevel) =>
   (contentOrTitle: LogContent, ...content: LogContent[]): void => {
+    if (IS_PRODUCTION) return;
     const title = content.length === 0 ? defaultTitle : stringify(contentOrTitle);
     const text = content.length === 0 ? [contentOrTitle] : content;
     prettyPrint(title, text, config.theme[colorKey] ?? fallbackColor, level);
   };
+
+/**
+ * 创建一个带固定前缀的日志器
+ *
+ * 内部复用 makeLogger，因此前缀 logger 与原 logger 在级别、主题、emoji、
+ * 级别过滤上完全一致，仅标题多一段前缀。
+ *
+ * @param prefix 前缀文本，如 '用户模块'
+ * @returns 与标准日志函数同形状的对象（debug/info/error/warning/success）
+ */
+export const withPrefix = (prefix: string) => {
+  const wrap =
+    (defaultTitle: string, colorKey: keyof Theme, fallbackColor: string, level: LogLevel) =>
+    (contentOrTitle: LogContent, ...content: LogContent[]): void => {
+      if (IS_PRODUCTION) return;
+      const title = content.length === 0 ? defaultTitle : stringify(contentOrTitle);
+      const text = content.length === 0 ? [contentOrTitle] : content;
+      prettyPrint(
+        `[${prefix}] ${title}`,
+        text,
+        config.theme[colorKey] ?? fallbackColor,
+        level
+      );
+    };
+
+  return {
+    debug: wrap('Debug', 'debugColor', '#5BC0EB', 'debug'),
+    info: wrap('Info', 'infoColor', '#A6A6A6', 'info'),
+    error: wrap('Error', 'errorColor', '#EC7270', 'error'),
+    warning: wrap('Warning', 'warningColor', '#F1AC6A', 'warn'),
+    success: wrap('Success', 'successColor', '#95DA69', 'info'),
+  };
+};
 
 /**
  * 输出调试信息
@@ -502,10 +660,11 @@ export const success = makeLogger('Success', 'successColor', '#95DA69', 'info');
  * @param text 要打印的文本或对象
  */
 export const rainbow = (text: LogContent): void => {
+  if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
-  const titlePrefix = buildTitlePrefix('info');
-  let formattedText = stringify(text);
+  const titlePrefix = buildTitlePrefix('info', 'rainbow');
+  const formattedText = escapeFormat(stringify(text));
   console.log(
     `%c${titlePrefix}${formattedText}`,
     'background: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet); color: white; padding: 2px;'
@@ -532,19 +691,20 @@ export const group = (
   expand: boolean = true,
   color?: string
 ): void => {
+  if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
-  const titlePrefix = buildTitlePrefix('info');
+  const titlePrefix = buildTitlePrefix('info', 'group');
   const groupColor = color ?? config.theme.groupColor;
 
   if (expand) {
     console.group(
-      `%c${titlePrefix}${title}:`,
+      `%c${escapeFormat(titlePrefix + title)}:`,
       `background-color: ${groupColor}; color: #ffffff; font-weight: bold; padding: 4px;`
     );
   } else {
     console.groupCollapsed(
-      `%c${titlePrefix}${title}:`,
+      `%c${escapeFormat(titlePrefix + title)}:`,
       `background-color: ${groupColor}; color: #ffffff; font-weight: bold; padding: 4px;`
     );
   }
@@ -552,7 +712,7 @@ export const group = (
   // 分组输出，用 try/finally 确保 groupEnd 始终被调用
   try {
     for (const item of content) {
-      let formattedText = stringify(item);
+      const formattedText = escapeFormat(stringify(item));
       console.log(`%c${formattedText}`, `color: ${groupColor}; padding: 2px;`);
     }
   } finally {
@@ -563,17 +723,30 @@ export const group = (
     level: 'info',
     timestamp: Date.now(),
     title,
-    content: [...content],
+    content: snapshotContent(content),
   });
 };
 
 /**
  * 将数组数据以表格形式输出到控制台
  *
+ * 与其它日志函数一致：遵守日志级别过滤，并写入历史。
+ *
  * @param data 一个任意类型的数组，其元素将被显示在表格中
  */
 export const table = (data: object | unknown[]): void => {
+  if (IS_PRODUCTION) return;
+  if (!config.shouldLog('info')) return;
+
   console.table(data);
+
+  const rows = Array.isArray(data) ? data : [data];
+  config.pushHistory({
+    level: 'info',
+    timestamp: Date.now(),
+    title: 'Table',
+    content: [`${rows.length} 行`],
+  });
 };
 
 /**
@@ -584,6 +757,7 @@ export const table = (data: object | unknown[]): void => {
  * @param altText 替代文本，默认为 'image'
  */
 export const picture = (url: string, scale: number = 1, altText: string = 'image'): void => {
+  if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
   const img = new Image();
@@ -625,6 +799,7 @@ const timers = new Map<string, number>();
  * @param label 计时器标签，用于标识特定的计时器
  */
 export const time = (label: string = 'default'): void => {
+  if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
   if (timers.has(label)) {
@@ -640,6 +815,7 @@ export const time = (label: string = 'default'): void => {
  * @param color 输出颜色，默认为紫色
  */
 export const timeEnd = (label: string = 'default', color?: string): void => {
+  if (IS_PRODUCTION) return;
   // 使用 timers.has() 而非 falsy 检查，避免 startTime === 0 被误杀
   if (!timers.has(label)) {
     console.warn(`未找到计时器 '${label}'`);
@@ -651,11 +827,11 @@ export const timeEnd = (label: string = 'default', color?: string): void => {
   timers.delete(label);
 
   const timeColor = color ?? config.theme.timeColor;
-  const titlePrefix = buildTitlePrefix('info');
+  const titlePrefix = buildTitlePrefix('info', 'time');
 
   console.log(
-    `%c ${titlePrefix}${label}: ${duration.toFixed(2)}ms `,
-    `background: ${timeColor}; color: white; padding: 2px 4px; border-radius: 2px;`
+    `%c ${escapeFormat(titlePrefix + label)}: ${duration.toFixed(2)}ms `,
+    `background: ${timeColor}; color: white; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`
   );
 
   config.pushHistory({
@@ -664,6 +840,150 @@ export const timeEnd = (label: string = 'default', color?: string): void => {
     title: label,
     content: [`${duration.toFixed(2)}ms`],
   });
+};
+
+/**
+ * 计时并自动记录一个（异步）操作的耗时
+ *
+ * 相比手动 time/timeEnd，本函数用 try/finally 保证**异常路径也会结束计时**，
+ * 不会因漏调用而泄漏计时器；异常本身会清理后重新抛出，不被吞掉。
+ *
+ * @param label 计时标签
+ * @param fn 要计时的操作，接收一个 done 回调（用于异步完成通知）
+ * @returns 与 fn 相同的返回值；若 fn 是同步抛错，则在清理后重新抛出
+ */
+export const timer = <T>(
+  label: string,
+  fn: (done: () => void) => T
+): T => {
+  if (IS_PRODUCTION) return fn(() => {});
+
+  const start = performance.now();
+  let settled = false;
+
+  const done = (): void => {
+    if (settled) return;
+    settled = true;
+    const duration = performance.now() - start;
+    const timeColor = config.theme.timeColor;
+    console.log(
+      `%c ${escapeFormat(buildTitlePrefix('info', 'time') + label)}: ${duration.toFixed(2)}ms `,
+      `background: ${timeColor}; color: white; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`
+    );
+    config.pushHistory({
+      level: 'info',
+      timestamp: Date.now(),
+      title: label,
+      content: [`${duration.toFixed(2)}ms`],
+    });
+  };
+
+  try {
+    const result = fn(done);
+    // thenable（Promise）必须等 settle 后才结束计时；同步返回值立即结束
+    if (result && typeof (result as { then?: unknown }).then === 'function') {
+      return (result as unknown as Promise<unknown>).then(
+        (value) => {
+          done();
+          return value;
+        },
+        (error) => {
+          done();
+          throw error;
+        }
+      ) as T;
+    }
+    done();
+    return result;
+  } catch (error) {
+    done();
+    throw error;
+  }
+};
+
+/**
+ * 已输出过的 once 键集合
+ */
+const onceKeys = new Set<string>();
+
+/**
+ * 只输出一次的日志
+ *
+ * 适合循环体内的调试日志：同一 key 只打印一次，避免刷屏。
+ * key 已输出过时本函数静默返回。
+ *
+ * @param key 唯一标识
+ * @param contentOrTitle 内容或标题
+ * @param content 可变内容参数
+ */
+export const once = (key: string, contentOrTitle: LogContent, ...content: LogContent[]): void => {
+  if (IS_PRODUCTION) return;
+  if (onceKeys.has(key)) return;
+  onceKeys.add(key);
+
+  const title = content.length === 0 ? 'Once' : stringify(contentOrTitle);
+  const text = content.length === 0 ? [contentOrTitle] : content;
+  prettyPrint(title, text, config.theme.infoColor, 'info');
+};
+
+/**
+ * 清空 once 记录，使所有 key 可重新输出
+ */
+export const clearOnce = (): void => {
+  onceKeys.clear();
+};
+
+/**
+ * 调用计数器
+ */
+const counters = new Map<string, number>();
+
+/**
+ * 累计某个键的调用次数（默认不输出）
+ *
+ * 适合统计热点：循环里调用 count(key)，结束时用 countSummary 汇总。
+ *
+ * @param key 唯一标识
+ */
+export const count = (key: string): void => {
+  if (IS_PRODUCTION) return;
+  counters.set(key, (counters.get(key) ?? 0) + 1);
+};
+
+/**
+ * 获取全部计数结果
+ *
+ * @returns 键到次数的映射
+ */
+export const countSummary = (): Record<string, number> => {
+  const result: Record<string, number> = {};
+  for (const [key, value] of counters) {
+    result[key] = value;
+  }
+  return result;
+};
+
+/**
+ * 清空所有计数器
+ */
+export const clearCounters = (): void => {
+  counters.clear();
+};
+
+/**
+ * 断言：条件不成立时走 error 通道并抛出
+ *
+ * @param condition 断言条件
+ * @param message 失败信息
+ */
+export const assert = (condition: unknown, message: string): void => {
+  if (IS_PRODUCTION) return;
+  if (condition) return;
+  // 先用原生 console.error 输出：浏览器 DevTools 会将其标红，
+  // 而 styled 的 error() 走的是 console.log，不会被标记为错误。
+  console.error(`[pretty-log] Assertion Failed: ${message}`);
+  error('Assertion Failed', message);
+  throw new Error(message);
 };
 
 // ================== 配置 API ==================
@@ -705,6 +1025,17 @@ export const configure = (options: ConfigOptions): void => {
   if (options.historySize !== undefined) {
     config.historySize = options.historySize;
   }
+};
+
+/**
+ * 设置部分样式覆盖
+ *
+ * 传 undefined 的项恢复默认值。
+ *
+ * @param partial 部分样式覆盖对象
+ */
+export const setStyles = (partial: Partial<Styles>): void => {
+  config.applyStyles(partial);
 };
 
 /**
@@ -758,6 +1089,7 @@ export const setHistorySize = (size: number): void => {
  * @returns 历史日志条目数组
  */
 export const getHistory = (): LogEntry[] => {
+  if (IS_PRODUCTION) return [];
   return config.getHistory();
 };
 
