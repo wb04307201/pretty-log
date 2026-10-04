@@ -1,0 +1,65 @@
+# tag 驱动的自动发布到 npm
+#
+# 触发条件：推送形如 v1.2.3 的 tag（v* 通配）。
+#
+# 链路：你本地 → Gitee（打 tag）→ Gitee 镜像同步该 tag 到 GitHub
+#         → 本工作流被触发 → 发布到 npm
+#
+# 因此**不需要** GITEE_TOKEN：Gitee → GitHub 的同步由 Gitee 仓库的镜像
+# 设置负责，CI 只负责"被触发后做发布"，不回写任何分支。
+#
+# 需要配置的仓库 Secret：
+#   NPM_TOKEN  npm 的 automation token（建议 granular 且仅限本包）
+#
+# GITHUB_TOKEN 由 GitHub 自动注入，本工作流不需要它。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 不需要写权限：本工作流只发布 npm，不推送任何分支
+permissions:
+  contents: read
+
+concurrency:
+  # 同一 tag 的发布串行化，避免重复发布
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 发布到 npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          # 需要完整 tag 信息供版本校验使用
+          fetch-depth: 0
+
+      - name: 安装依赖
+        run: yarn install --frozen-lockfile
+
+      - name: 校验 tag 与 package.json 版本一致
+        run: node scripts/verify-tag-version.js "${{ github.ref_name }}"
+
+      - name: 单元测试
+        run: yarn test:unit
+
+      - name: 类型检查
+        run: npx tsc --noEmit
+
+      - name: 构建
+        run: yarn build
+
+      - name: 发布到 npm
+        # 用 npm 而非 yarn publish：npm 7+ 会自动把 NPM_TOKEN 环境变量
+        # 写入 .npmrc，而 yarn 1 的 publish 只认 .npmrc 文件、不认该环境变量。
+        run: npm publish --access public --registry https://registry.npmjs.org/
+        env:
+          # 必须是 NPM_TOKEN —— 这是 npm 官方约定的变量名，
+          # 换成 NODE_AUTH_TOKEN 或自定义名会导致认证失败。
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

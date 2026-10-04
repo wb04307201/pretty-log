@@ -22,9 +22,10 @@
   ],
   "scripts": {
     "build": "parcel build",
-    "release": "rimraf ./dist && parcel build && yarn publish --access public --registry https://registry.npmjs.org/",
     "test": "parcel test/test.html",
-    "test:unit": "node --test test/*.test.ts"
+    "test:unit": "node --test test/*.test.ts test/*.test.js",
+    "verify:tag": "node scripts/verify-tag-version.js",
+    "prepublishOnly": "node --test test/*.test.ts test/*.test.js && npx tsc --noEmit"
   },
   "keywords": [],
   "devDependencies": {

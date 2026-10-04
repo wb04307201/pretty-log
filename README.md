@@ -6,6 +6,10 @@
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
+## Contributing
+
+This project uses automated releases driven by git tags. See [RELEASING.md](RELEASING.md) for the tag workflow and the required repository secret.
+
 ## Installation
 ```sh
 npm install @wb04307201/pretty-log
