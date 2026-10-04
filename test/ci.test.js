@@ -42,9 +42,16 @@ test('parseTagVersion: undefined 返回 null 而非抛错', () => {
 })
 
 /** 执行校验脚本，返回退出码与合并输出 */
-function run(tag) {
+/** 执行脚本，返回 { code, out }；code 为退出码。env 用于隔离宿主环境变量 */
+function run(tag, env = {}) {
   try {
-    return { code: 0, out: execFileSync(process.execPath, [script, tag], { encoding: 'utf8' }) }
+    return {
+      code: 0,
+      out: execFileSync(process.execPath, [script, tag], {
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_REF_NAME: '', ...env },
+      }),
+    }
   } catch (e) {
     return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }
   }
@@ -69,8 +76,12 @@ test('端到端: 非法 tag 时退出码 1', () => {
 })
 
 test('端到端: 缺少 tag 参数时退出码 1', () => {
-  const r = run('')
-  assert.equal(r.code, 1, '缺少 tag 必须失败')
+  // 必须清掉 GITHUB_REF_NAME：脚本在无 argv 参数时会回退读它，
+  // 而 GitHub Actions 里该变量恰好是当前 tag（如 v1.1.0），会导致
+  // 校验意外通过、退出码变成 0。本地无此变量，故只在 CI 上暴露。
+  const r = run('', { GITHUB_REF_NAME: '' })
+  assert.equal(r.code, 1, `缺少 tag 必须失败，实际输出：${r.out}`)
+  assert.ok(r.out.includes('缺少版本参数') || r.out.includes('缺少 tag'), `应报告缺参数，实际：${r.out}`)
 })
 
 test('端到端: 预发布 tag 与 package.json 一致时通过', () => {
