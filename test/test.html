@@ -9,6 +9,12 @@
 <script type="module">
     import * as prettyLog from '../src/index.ts'
 
+    // 本地样图：内联为 data URI，彻底不依赖网络与打包器的静态资源管线。
+    // （早前试过 './sample.png' 与 '/test/sample.png' 两种相对路径，
+    //   两者都会被 Parcel dev server 的 SPA fallback 吞成 test.html，
+    //   静态资源 import 在 HTML entry 下亦解析为空对象。）
+    const SAMPLE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAB4CAIAAAAMrLyJAAAEbUlEQVR42u3T5VqQBxgAUC/RhXOdzrWFKBIGYVBKidKpUiKtlEioC+c6nev72Pu9t7C/53nOLZxdu8se7i57EJ4JJ+4/m54L5TvPpz3l23sqtl9Ieyu29lYWXqzcDC9VFV6uuhdeORk2Xk2vnQp3X09vnA7r4c1wZu2t9HaoXn0n7ate2Vez8m7aX7O8v7bwXu2d8H5d4YO62+HDs2Hpo/TxubD4STpwPiyEg+HC/KF0ONTPHUkl9bMlDbNHU2nDTGlj4VjjrXC8qVDWNB1ONIeb5aniYpiqTFWXwmQ4GVomTqXToXX8TKpuHatuG6tJtW03atsLde3Xw9mOwrmOa+H85TB6IdV3hpGG1HglDIemcHWoOV0MXYOXUkvXQEv3QGtq6+5v6ym09/SFjt7C5d7e0NkXeq6kq/2huyt1D4Su0BMGr/amvjB0pT8NDHUODHcOpqHhy0MjheGRjjAyWhgdbQ/XroW26+nG9dA6lsZvhJYwEcYuTaapMH7xZpoeb56eaL6VZiaaZiYLs5ONYW6qMD/VEBZuhvrFtDQdLtxOd26F82E5zJxbSath9uxaWp+tW5+ru5s25mo35gv35mvC5kJha6E6bC+GMzvp/lI4/SA9vB1OhU/DnZOfpc/DctUX6dFy5aOVyi/T45WKx6uFr1bLw9drhW/WToRv10PZd+n7u+H4D+nHjXAs/BTulf6cfgmbR39NTzZLnmyV/Jaebh15ul34fftw+GOn8OfOofDX/XDw7/TPg3Dg37RLYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBRZYYIEFFlhggQUWWGCBBf6/gf8DsjmJr2xUDlgAAAAASUVORK5CYII='
+
     // 信息
     prettyLog.info("Hello world!")
     prettyLog.info("信息", "Hello world!")
@@ -52,8 +58,8 @@
         prettyLog.timeEnd('计时器');
     }, 2000); // 2000 毫秒 = 2 秒
 
-    // 图片
-    prettyLog.picture("https://faw-cms-1300211780.cos.ap-beijing.myqcloud.com/202405/51716773469593/1716773469593%E8%BD%A6%E5%9E%8B%E5%9B%BE4_1000x400.png", 0.2)
+    // 图片（内联本地样图，不依赖外网）
+    prettyLog.picture(SAMPLE_PNG, 1)
 
     // json格式
     prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
@@ -98,6 +104,48 @@
         showTimestamp: false,
     })
     prettyLog.info("关闭 Emoji 和时间戳")
+
+    // ===== 新增功能演示 =====
+
+    // --- 异步计时器（异常路径也会结束计时） ---
+    console.log('--- timer 异步计时 ---')
+    prettyLog.timer('fetch-用户数据', () =>
+        new Promise((resolve) => setTimeout(() => resolve('done'), 300))
+    )
+
+    // --- 只输出一次 ---
+    console.log('--- once 只输出一次 ---')
+    for (let i = 0; i < 5; i++) {
+        prettyLog.once('render-once', '这条只会出现一次', `第 ${i} 次调用被忽略`)
+    }
+
+    // --- 调用计数 ---
+    console.log('--- count 调用计数 ---')
+    ;['api-a', 'api-a', 'api-b'].forEach((k) => prettyLog.count(k))
+    console.log('调用统计:', JSON.stringify(prettyLog.countSummary()))
+    prettyLog.clearCounters()
+
+    // --- 带前缀的 logger ---
+    console.log('--- withPrefix 前缀 logger ---')
+    const userLog = prettyLog.withPrefix('用户模块')
+    userLog.info('登录成功', { userId: 123 })
+    userLog.warning('昵称已存在', '将自动追加数字后缀')
+
+    // --- 断言（失败会抛出，正常流程请勿触发） ---
+    console.log('--- assert 断言 ---')
+    prettyLog.assert(1 + 1 === 2, '数学基本定理')
+    console.log('断言通过，未抛出')
+
+    // --- 自定义样式 ---
+    console.log('--- setStyles 自定义样式 ---')
+    prettyLog.setStyles({ borderRadius: '8px', padding: '3px 10px' })
+    prettyLog.info("圆角和内边距已改变")
+    prettyLog.setStyles({ borderRadius: undefined, padding: undefined })  // 恢复默认
+
+    // --- 格式串注入防护 ---
+    console.log('--- 百分号转义 ---')
+    prettyLog.info("注入测试", "这里有 %c 和 %s，应该原样显示")
+    prettyLog.info("百分号", "完成 50%")
 </script>
 </body>
 </html>

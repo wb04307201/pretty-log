@@ -114,12 +114,78 @@ prettyLog.configure({
 const history = prettyLog.getHistory();
 console.log(JSON.stringify(history, null, 2));
 
-// 调整历史记录大小（设为 0 禁用）
+// 调整历史记录大小（设为 0 禁用）。
+// 非法值会被自动夹紧而不会抛异常，且调整容量时会保留已有记录
+//（缩容时保留最近的若干条）。
 prettyLog.setHistorySize(500);
 
 // 清空历史
 prettyLog.clearHistory();
 ```
+
+### 异步计时器
+`timer` 在正常与抛错/拒绝两条路径上都会结束计时，且不会吞掉原始异常。
+```javascript
+// 同步任务 —— 立即输出
+const result = prettyLog.timer('parse', () => JSON.parse(raw));
+
+// 异步任务 —— Promise 结束后输出
+await prettyLog.timer('fetch-user', () => fetch('/api/user').then(r => r.json()));
+
+// 即使抛错也会结束计时，异常继续向上传递
+await prettyLog.timer('risky', () => Promise.reject(new Error('boom')));
+```
+
+### 只输出一次
+适合写在循环里的调试日志，同一个 key 只会打印一次。
+```javascript
+for (const item of items) {
+  prettyLog.once('render', '组件已渲染', item.id);
+}
+
+prettyLog.clearOnce();  // 清空记录，所有 key 可重新输出
+```
+
+### 调用计数
+```javascript
+items.forEach(i => prettyLog.count('api-call'));
+
+console.log(prettyLog.countSummary());  // { 'api-call': 42 }
+prettyLog.clearCounters();
+```
+
+### 带前缀的 logger
+返回一组带固定前缀的日志函数，级别、主题与过滤规则与标准日志函数一致。
+```javascript
+const userLog = prettyLog.withPrefix('用户模块');
+userLog.info('登录成功', { userId: 123 });
+// [用户模块] 登录成功
+// {"userId":123}
+```
+
+### 断言
+条件成立时静默；失败时走 `console.error`（DevTools 中标红）并抛出异常。
+```javascript
+prettyLog.assert(user != null, 'user 不能为空');
+```
+
+### 自定义样式
+```javascript
+prettyLog.setStyles({ borderRadius: '8px', padding: '3px 10px' });
+
+// 传 undefined 恢复默认
+prettyLog.setStyles({ borderRadius: undefined });
+```
+
+### 生产环境剥离
+当 `NODE_ENV=production` 时，全部日志 API 退化为静默 no-op，
+调试代码可以留在源码里而不会污染线上包。
+```javascript
+// 生产环境下不会输出
+prettyLog.info('这条不会出现');
+```
+
+注意：生产环境下 `timer` 仍会执行你传入的函数，只是日志被抑制。
 
 ## 输出
 ![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)
