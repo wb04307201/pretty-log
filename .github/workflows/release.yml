@@ -117,15 +117,22 @@ jobs:
         #   E401     —— 凭据到了但无效，通常是 token 过期或权限不足
         # 二者混在一起会误导排查方向，故先把事实打出来。
         # 打印长度而非内容，避免令牌泄漏到日志。
+        # 输出同时写进 job summary —— steps 的日志需登录态 XHR 拉取，
+        # summary 则是页面直接渲染的，无需任何权限。
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "NPM_TOKEN 是否为空: $([ -z "$NPM_TOKEN" ] && echo 是 || echo 否)"
-          echo "NPM_TOKEN 长度: ${#NPM_TOKEN}"
-          echo "--- npm config 里的认证相关项 ---"
-          npm config list 2>/dev/null | grep -iE "auth|registry|token" | sed -E 's/(_authToken|_auth) *=.*/\1 = <REDACTED>/'
-          echo "--- whoami 探测（期望 E401=凭据已送达但无效）---"
-          npm whoami --registry https://registry.npmjs.org/ 2>&1 | head -3 || true
+          {
+            echo "NPM_TOKEN 是否为空: $([ -z "$NPM_TOKEN" ] && echo 是 || echo 否)"
+            echo "NPM_TOKEN 长度: ${#NPM_TOKEN}"
+            echo "--- npm config 认证项（已脱敏）---"
+            npm config list 2>/dev/null | grep -iE "auth|registry|token" | sed -E 's/(_authToken|_auth) *=.*/\1 = <REDACTED>/' || echo "(无)"
+            echo "--- whoami 探测 ---"
+            npm whoami --registry https://registry.npmjs.org/ 2>&1 | head -3 || true
+          } | tee /tmp/auth-diag.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/auth-diag.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: 发布到 npm
         # 用 npm 而非 yarn publish：npm 7+ 会自动把 NPM_TOKEN 环境变量
