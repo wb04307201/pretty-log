@@ -111,10 +111,37 @@ jobs:
       - name: 构建
         run: yarn build
 
+      - name: 诊断认证状态
+        # npm 的报错 ENEEDAUTH（need auth）与 E401（Unauthorized）含义不同：
+        #   ENEEDAUTH —— 凭据根本没到 npm，通常是 secret 为空或变量名写错
+        #   E401     —— 凭据到了但无效，通常是 token 过期或权限不足
+        # 二者混在一起会误导排查方向，故先把事实打出来。
+        # 打印长度而非内容，避免令牌泄漏到日志。
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "NPM_TOKEN 是否为空: $([ -z "$NPM_TOKEN" ] && echo 是 || echo 否)"
+          echo "NPM_TOKEN 长度: ${#NPM_TOKEN}"
+          echo "--- npm config 里的认证相关项 ---"
+          npm config list 2>/dev/null | grep -iE "auth|registry|token" | sed -E 's/(_authToken|_auth) *=.*/\1 = <REDACTED>/'
+          echo "--- whoami 探测（期望 E401=凭据已送达但无效）---"
+          npm whoami --registry https://registry.npmjs.org/ 2>&1 | head -3 || true
+
       - name: 发布到 npm
         # 用 npm 而非 yarn publish：npm 7+ 会自动把 NPM_TOKEN 环境变量
         # 写入 .npmrc，而 yarn 1 的 publish 只认 .npmrc 文件、不认该环境变量。
-        run: npm publish --access public --registry https://registry.npmjs.org/
+        # 失败输出写进 job summary：logs 接口需管理员权限，summary 对
+        # 所有有仓库访问权的人可见。
+        run: |
+          set +e
+          npm publish --access public --registry https://registry.npmjs.org/ > /tmp/publish.log 2>&1
+          code=$?
+          set -e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/publish.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/publish.log
+          exit $code
         env:
           # 必须是 NPM_TOKEN —— 这是 npm 官方约定的变量名，
           # 换成 NODE_AUTH_TOKEN 或自定义名会导致认证失败。
