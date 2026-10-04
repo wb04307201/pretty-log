@@ -43,6 +43,15 @@ jobs:
     name: 发布到 npm
     runs-on: ubuntu-latest
     steps:
+      # 显式锁定 Node 版本，不依赖 runner 的默认版本。
+      # ubuntu-24.04 当前默认 Node 为 22.23.3，而测试直接 import .ts 源文件，
+      # 需要 22.6+ 的 --experimental-strip-types（23.6+ 才默认开启）——
+      # package.json 的 test:unit 已带上该 flag，锁到 24 是为了与其余行为一致。
+      - name: 准备 Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: 检出被 release 的 tag
         uses: actions/checkout@v4
         with:
@@ -78,7 +87,12 @@ jobs:
           fi
 
       - name: 单元测试
-        run: yarn test:unit
+        # 用 offline 变体：它排除需要访问 npm registry 的用例
+        # （ci-publish.test.js）。那些用例验的是 npm 的可用性而非本仓代码，
+        # CI 网络受限时不应阻塞发布。本地想跑全量用 yarn test:unit。
+        run: |
+          echo "Node: $(node -v) / npm: $(npm -v)"
+          yarn test:unit:offline
 
       - name: 类型检查
         run: npx tsc --noEmit

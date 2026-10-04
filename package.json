@@ -23,7 +23,8 @@
   "scripts": {
     "build": "parcel build",
     "test": "parcel test/test.html",
-    "test:unit": "node --test test/*.test.ts test/*.test.js",
+    "test:unit": "node --experimental-strip-types --test test/*.test.ts test/*.test.js",
+    "test:unit:offline": "node --experimental-strip-types --test test/core.test.ts test/features.test.ts test/ci.test.js",
     "verify:tag": "node scripts/verify-tag-version.js",
     "prepublishOnly": "node --test test/*.test.ts test/*.test.js && npx tsc --noEmit"
   },
