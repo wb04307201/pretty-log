@@ -14,7 +14,7 @@
 
 | Secret | 用途 |
 |---|---|
-| `NPM_TOKEN` | 发布到 npm |
+| `NPM_TOKEN` | 发布到 npm（工作流内部转交给 npm 时用的是 `NODE_AUTH_TOKEN`，见下方说明） |
 
 **为什么只要这一个**：Gitee → GitHub 的仓库同步由 Gitee 侧的镜像设置负责，
 CI 只需在被触发后完成发布，不需要回写任何分支，因此不需要 Gitee 令牌。
@@ -146,8 +146,46 @@ A：三点可能——① tag 未以 `v` 开头（触发器只匹配 `v*`）；�
 只推到了 GitHub 而没推到 Gitee，镜像无从获取）。
 
 **Q：发布报 `ENEEDAUTH` 或 401？**
-A：`NPM_TOKEN` 无效或过期。确认变量名是大写的 `NPM_TOKEN`——
-npm 只认这个名字，换成 `NODE_AUTH_TOKEN` 不会生效。
+
+A：先分清是哪一个，两者含义完全不同：
+
+| 报错 | 含义 | 查什么 |
+|---|---|---|
+| `ENEEDAUTH`（need auth） | npm **本地**就没找到凭据，请求根本没发出去 | 发布步骤是否写了 `$RUNNER_TEMP/npmrc`；`NODE_AUTH_TOKEN` 是否为空 |
+| `E401`（Unauthorized） | 凭据发出去了但被拒 | `NPM_TOKEN` 是否过期、是否仍是 Granular 类型、Packages 里是否仍勾选了 `@wb04307201/pretty-log` 且权限为 Read and write |
+
+工作流里的「诊断认证状态」步骤会把这两项事实直接打进 job summary，
+先看那里能省掉大部分猜测。
+
+> **一个容易踩的坑**：npm 不读 `NPM_TOKEN` 这类环境变量，它只从 `.npmrc`
+> 的 `_authToken` 行取凭据。所以工作流内部传给 npm 的环境变量叫
+> `NODE_AUTH_TOKEN`（要与 `.npmrc` 里写的 `${NODE_AUTH_TOKEN}` 一致），
+> 而 GitHub Secret 仍叫 `NPM_TOKEN`。两个名字不一样是正常的。
+
+### 为什么不用 setup-node 的 registry-url
+
+GitHub 官方文档推荐的写法是给 `actions/setup-node` 加 `registry-url`：
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: '24'
+    registry-url: 'https://registry.npmjs.org'
+```
+
+**本仓库刻意不用它**，因为它会让发布流程整体失败：
+
+1. `registry-url` 会让 setup-node 生成一份含 `${NODE_AUTH_TOKEN}` 的 `.npmrc`，
+   并把 `NPM_CONFIG_USERCONFIG` 导出为**整个 job 全局生效**。
+2. 本工作流的「安装依赖」步骤用 **yarn 1**，且跑在发布步骤之前、拿不到令牌。
+3. yarn 1 读到 `.npmrc` 里无法替换的 `${...}` 变量时，直接抛
+   `Failed to replace env in config` 并中止 —— 连空依赖的包都装不上。
+
+也就是说，加了 `registry-url` 会把失败点从「发布时认证失败」提前到
+「安装依赖时就崩」，看起来像是修好了认证，实际整个流程根本走不到发布。
+
+因此本仓库改为**只在需要凭据的两个步骤内现建 `.npmrc`**，
+并用 `NPM_CONFIG_USERCONFIG=... npm publish` 临时指定，不跨步骤泄漏。
 
 **Q：`yarn install --frozen-lockfile` 报错？**
 A：`package.json` 与 `yarn.lock` 不一致。本地跑
