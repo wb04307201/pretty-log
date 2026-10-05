@@ -8,31 +8,48 @@
 
 ---
 
-## 一次性准备：配置仓库 Secrets
+## 一次性准备：登记 Trusted Publisher
 
-在 GitHub 仓库 **Settings → Secrets and variables → Actions** 中添加**一个** Secret：
+本仓库用**Trusted Publishing（OIDC）**发布到 npm，**不需要任何 Secret**。
 
-| Secret | 用途 |
-|---|---|
-| `NPM_TOKEN` | 发布到 npm（工作流内部转交给 npm 时用的是 `NODE_AUTH_TOKEN`，见下方说明） |
+npm 通过 OIDC 与你的 GitHub 仓库建立信任关系：CI 运行时用短期的
+`id_token` 换取发布令牌，令牌用完即失效，仓库里也不存在长期凭据。
 
-**为什么只要这一个**：Gitee → GitHub 的仓库同步由 Gitee 侧的镜像设置负责，
-CI 只需在被触发后完成发布，不需要回写任何分支，因此不需要 Gitee 令牌。
+### 在 npm 后台登记
 
-**npm token 怎么生成**：npmjs.com → 右上角头像 → Access Tokens → Generate。
-
-选 **Granular** 类型（不要用 Classic）：
+npmjs.com → 你的包 `@wb04307201/pretty-log` → **Access** 标签页 →
+**Set up Trusted Publisher**：
 
 | 项 | 填什么 |
 |---|---|
-| Token name | 如 `pretty-log-ci` |
-| Expiration | 建议 90 天 |
-| Packages | 勾选，Package name 填 `@wb04307201/pretty-log`，权限 **Read and write** |
-| 其余权限 | 全部不勾 |
+| Publisher | `GitHub Actions` |
+| Organization or user | `wb04307201` |
+| Repository | `pretty-log` |
+| Workflow filename | `release.yml` |
+| Label | 随意，如 `GitHub Actions release` |
+| Allowed actions | 勾选 **`Allow npm publish`** |
 
-Granular token 只对这个包有效；Classic token 的 `publish` 权限覆盖整个 npm 账号。
+> ⚠️ **这些字段创建后不可修改**（npm 页面原文：*Cannot be changed later.*）。
+> 填错只能删除连接后重建。`Workflow filename` 只填文件名，不带路径。
 
-> 令牌值**只能**填在 GitHub Secrets 里，不要写进仓库任何文件。
+> **`Repository` 填的是 GitHub 上的仓库名**（`pretty-log`），
+> 不是 Gitee 地址。本仓库以 Gitee 为上游、由镜像同步到 GitHub，
+> 但 OIDC 的信任绑定认的是 GitHub 那一侧。
+
+### 确认 npm CLI 版本
+
+Trusted Publishing 需要 **npm ≥ 11.5.1**，更早的版本没有 OIDC 交换逻辑。
+工作流里已加 `npm install -g npm@latest` 显式升级——不要依赖 Node 捆绑的
+npm 版本，它会随时间漂移。
+
+### 清掉旧的 NPM_TOKEN
+
+仓库里若还存着 `NPM_TOKEN` secret，**请到
+GitHub Settings → Secrets and variables → Actions 删除它**。
+OIDC 下它不再被引用，留着等于长期凭据白白躺在仓库里。
+
+**为什么不需要 Gitee 令牌**：Gitee → GitHub 的仓库同步由 Gitee 侧的镜像
+设置负责，CI 只需在被触发后完成发布，不需要回写任何分支。
 
 ---
 
@@ -145,47 +162,45 @@ A：三点可能——① tag 未以 `v` 开头（触发器只匹配 `v*`）；�
 （去 GitHub 的 tags 页面确认）；③ tag 指向的 commit 不在 GitHub 上（若该 commit
 只推到了 GitHub 而没推到 Gitee，镜像无从获取）。
 
-**Q：发布报 `ENEEDAUTH` 或 401？**
+**Q：发布报 `ENEEDAUTH`？**
 
-A：先分清是哪一个，两者含义完全不同：
+A：OIDC 下最常见的一种失败，且**报错信息具有误导性**——npm 在拿不到
+`id_token` 时**不报错**，而是静默降级为「无凭据」状态，直到发布时才以
+`ENEEDAUTH` 收场。看起来像认证坏了，实际通常是权限或版本问题。
 
-| 报错 | 含义 | 查什么 |
-|---|---|---|
-| `ENEEDAUTH`（need auth） | npm **本地**就没找到凭据，请求根本没发出去 | 发布步骤是否写了 `$RUNNER_TEMP/npmrc`；`NODE_AUTH_TOKEN` 是否为空 |
-| `E401`（Unauthorized） | 凭据发出去了但被拒 | `NPM_TOKEN` 是否过期、是否仍是 Granular 类型、Packages 里是否仍勾选了 `@wb04307201/pretty-log` 且权限为 Read and write |
+按可能性从高到低排查：
 
-工作流里的「诊断认证状态」步骤会把这两项事实直接打进 job summary，
-先看那里能省掉大部分猜测。
+| 原因 | 怎么确认 |
+|---|---|
+| `permissions` 里缺 `id-token: write` | 看 workflow 顶部；缺了它 GitHub 不会注入 `ACTIONS_ID_TOKEN_REQUEST_URL` |
+| npm CLI < 11.5.1 | 诊断步骤会回显 `npm 版本` |
+| Trusted Publisher 登记的仓库名/工作流名与实际不符 | 回 npm 包页面 Access 确认三项是否与 GitHub 上一致 |
+| 登记时没勾 `Allow npm publish` | 同上，在 Allowed actions 一栏 |
 
-> **一个容易踩的坑**：npm 不读 `NPM_TOKEN` 这类环境变量，它只从 `.npmrc`
-> 的 `_authToken` 行取凭据。所以工作流内部传给 npm 的环境变量叫
-> `NODE_AUTH_TOKEN`（要与 `.npmrc` 里写的 `${NODE_AUTH_TOKEN}` 一致），
-> 而 GitHub Secret 仍叫 `NPM_TOKEN`。两个名字不一样是正常的。
+**诊断步骤会一次性告诉你前两项**：先看 job summary 里的
+`id-token 端点` 与 `npm 版本` 两行。
 
-### 为什么不用 setup-node 的 registry-url
+**Q：发布报 `E403` 或 `401`？**
+A：与 OIDC 无关，是 npm 侧的账号策略在拒绝。`E403` 通常是包的
+**Publishing access** 选项与所用凭据冲突（页面提示：trusted publisher
+与各选项都兼容，若仍报错说明绑定本身没生效）。
 
-GitHub 官方文档推荐的写法是给 `actions/setup-node` 加 `registry-url`：
+**Q：为什么不用 setup-node 的 registry-url？**
 
-```yaml
-- uses: actions/setup-node@v4
-  with:
-    node-version: '24'
-    registry-url: 'https://registry.npmjs.org'
-```
-
-**本仓库刻意不用它**，因为它会让发布流程整体失败：
+OIDC 下**根本不需要** `.npmrc`，加了反而会坏事：
 
 1. `registry-url` 会让 setup-node 生成一份含 `${NODE_AUTH_TOKEN}` 的 `.npmrc`，
    并把 `NPM_CONFIG_USERCONFIG` 导出为**整个 job 全局生效**。
-2. 本工作流的「安装依赖」步骤用 **yarn 1**，且跑在发布步骤之前、拿不到令牌。
+2. 本工作流的「安装依赖」步骤用 **yarn 1**，且跑在发布步骤之前。
 3. yarn 1 读到 `.npmrc` 里无法替换的 `${...}` 变量时，直接抛
-   `Failed to replace env in config` 并中止 —— 连空依赖的包都装不上。
+   `Failed to replace env in config` 并中止 —— 连零依赖的空包都装不上。
 
-也就是说，加了 `registry-url` 会把失败点从「发布时认证失败」提前到
-「安装依赖时就崩」，看起来像是修好了认证，实际整个流程根本走不到发布。
+也就是说，加了它会把失败点从「发布时认证失败」提前到「安装依赖时就崩」，
+看起来像是修好了认证，实际整个流程根本走不到发布。
 
-因此本仓库改为**只在需要凭据的两个步骤内现建 `.npmrc`**，
-并用 `NPM_CONFIG_USERCONFIG=... npm publish` 临时指定，不跨步骤泄漏。
+（这段坑是真的踩过：修复认证的第一版就用了 `registry-url`，
+结果把失败点从发布提前到了装依赖。`test/workflow-contract.test.js`
+里有一条用例专门断言 `registry-url` 不得出现。）
 
 **Q：`yarn install --frozen-lockfile` 报错？**
 A：`package.json` 与 `yarn.lock` 不一致。本地跑

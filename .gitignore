@@ -27,3 +27,6 @@ yarn-error.log*
 /.parcel-cache/
 /.claude/
 .aqg/
+
+# 浏览器自动化产出的快照/日志；其中可能混入 2FA 恢复码等敏感内容
+/.playwright-mcp/
