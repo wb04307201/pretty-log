@@ -180,6 +180,29 @@ A：OIDC 下最常见的一种失败，且**报错信息具有误导性**——n
 **诊断步骤会一次性告诉你前两项**：先看 job summary 里的
 `id-token 端点` 与 `npm 版本` 两行。
 
+**Q：发布报 `E422`，提示 sigstore provenance 校验失败？**
+
+A：`package.json` 的 `repository.url` 与实际发布仓库不一致。典型报错：
+
+```
+Error verifying sigstore provenance bundle: Failed to validate repository information:
+package.json: "repository.url" is "https://gitee.com/wb04307201/pretty-log",
+expected to match "https://github.com/wb04307201/pretty-log" from provenance
+```
+
+**为什么会校验**：npm 12 在 GitHub Actions + 公共仓库下**自动开启 provenance**
+（npm CLI `lib/utils/oidc.js`：仅当 `provenance` 取默认值、仓库为 public 时
+才 `opts.provenance = true`）。provenance 是供应链签名，npm registry 会校验
+签名里记录的发布仓库与包元数据是否相符。
+
+**解法**：把 `package.json` 的 `repository.url` 改成 GitHub 地址。
+本仓库以 Gitee 为上游、镜像同步到 GitHub，但**发布发生在 GitHub**，
+所以 `repository.url` / `bugs.url` / `homepage` 都指向 GitHub。
+
+> 要关闭 provenance 只能显式传 `--no-provenance`（那会让
+> `isDefaultProvenance` 为假）。但这是**供应链安全降级**，不建议；
+> 正确做法是让元数据与实际发布仓库一致。
+
 **Q：发布报 `E403` 或 `401`？**
 A：与 OIDC 无关，是 npm 侧的账号策略在拒绝。`E403` 通常是包的
 **Publishing access** 选项与所用凭据冲突（页面提示：trusted publisher
