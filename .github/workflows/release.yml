@@ -14,6 +14,9 @@
 # 需要配置的仓库 Secret：
 #   NPM_TOKEN  npm 的 automation token（建议 granular 且仅限本包）
 #
+# Secret 名是 NPM_TOKEN，工作流内部传给 npm 的环境变量则是 NODE_AUTH_TOKEN
+# —— 后者要与 .npmrc 里写的 ${NODE_AUTH_TOKEN} 一致，两者不同名是正常的。
+#
 # GITHUB_TOKEN 由 GitHub 自动注入，本工作流不需要它。
 
 name: Release
@@ -47,6 +50,11 @@ jobs:
       # ubuntu-24.04 当前默认 Node 为 22.23.3，而测试直接 import .ts 源文件，
       # 需要 22.6+ 的 --experimental-strip-types（23.6+ 才默认开启）——
       # package.json 的 test:unit 已带上该 flag，锁到 24 是为了与其余行为一致。
+      # setup-node 的 registry-url 会生成一份含 ${NODE_AUTH_TOKEN} 的 .npmrc
+      # 并把 NPM_CONFIG_USERCONFIG 指向它全局生效；yarn 1 读到该文件里无法替换的
+      # ${...} 变量时直接抛 `Failed to replace env in config` 并中止（实测，
+      # 连空依赖的包都装不上）。而本工作流的「安装依赖」步骤用的是 yarn，
+      # 早于发布步骤且拿不到令牌，故改由发布步骤自己建 .npmrc。
       - name: 准备 Node 24
         uses: actions/setup-node@v4
         with:
@@ -113,35 +121,54 @@ jobs:
 
       - name: 诊断认证状态
         # npm 的报错 ENEEDAUTH（need auth）与 E401（Unauthorized）含义不同：
-        #   ENEEDAUTH —— 凭据根本没到 npm，通常是 secret 为空或变量名写错
-        #   E401     —— 凭据到了但无效，通常是 token 过期或权限不足
+        #   ENEEDAUTH —— 本地就没找到凭据：.npmrc 里没有 _authToken 行，
+        #                或那行引用的环境变量为空。请求根本没发出去。
+        #   E401     —— 凭据发出去了但被拒：token 过期、权限不足、
+        #                或 token 只对别的包有效。
         # 二者混在一起会误导排查方向，故先把事实打出来。
+        #
+        # 这里自建 .npmrc 而非依赖 setup-node 的 registry-url，原因见上面
+        # 「准备 Node 24」的注释：那份 .npmrc 会让前面的 yarn install 崩掉。
+        # NPM_CONFIG_USERCONFIG 只对单条命令生效，不 export、不写 $GITHUB_ENV，
+        # 因此不会污染其他步骤。
+        #
         # 打印长度而非内容，避免令牌泄漏到日志。
         # 输出同时写进 job summary —— steps 的日志需登录态 XHR 拉取，
         # summary 则是页面直接渲染的，无需任何权限。
+        # npm config list 对 _authToken 输出 (protected) 而非明文，脱敏后
+        # 可安全落进 summary；下面的 sed 是第二道保险。
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          printf 'registry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$RUNNER_TEMP/npmrc"
+          echo "NODE_AUTH_TOKEN 是否为空: $([ -z "$NODE_AUTH_TOKEN" ] && echo 是 || echo 否)"
+          echo "NODE_AUTH_TOKEN 长度: ${#NODE_AUTH_TOKEN}"
           {
-            echo "NPM_TOKEN 是否为空: $([ -z "$NPM_TOKEN" ] && echo 是 || echo 否)"
-            echo "NPM_TOKEN 长度: ${#NPM_TOKEN}"
             echo "--- npm config 认证项（已脱敏）---"
-            npm config list 2>/dev/null | grep -iE "auth|registry|token" | sed -E 's/(_authToken|_auth) *=.*/\1 = <REDACTED>/' || echo "(无)"
+            NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc" npm config list 2>/dev/null | grep -iE "auth|registry|token" | sed -E 's/(_authToken|_auth) *=.*/\1 = <REDACTED>/' || echo "(无)"
             echo "--- whoami 探测 ---"
-            npm whoami --registry https://registry.npmjs.org/ 2>&1 | head -3 || true
+            NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc" npm whoami --registry https://registry.npmjs.org/ 2>&1 | head -3 || true
           } | tee /tmp/auth-diag.txt
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/auth-diag.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: 发布到 npm
-        # 用 npm 而非 yarn publish：npm 7+ 会自动把 NPM_TOKEN 环境变量
-        # 写入 .npmrc，而 yarn 1 的 publish 只认 .npmrc 文件、不认该环境变量。
+        # 凭据靠本步骤现建的 .npmrc 传递：npm 只认 .npmrc 里的 _authToken 行，
+        # 不读 NPM_TOKEN 这类环境变量（实测：只有 NPM_TOKEN 环境变量、无 .npmrc
+        # 时，publish 直接在本地报 ENEEDAUTH，一次请求都不会发向 registry）。
+        # 故变量名必须与 .npmrc 里写的 ${NODE_AUTH_TOKEN} 一致；
+        # secret 本身仍叫 NPM_TOKEN，两个名字不同是正常的。
+        #
+        # 用 npm 而非 yarn publish：yarn 1 同样无法处理这份含 ${...} 的 .npmrc
+        # （见上面「准备 Node 24」的注释），npm 则能正常插值。
         # 失败输出写进 job summary：logs 接口需管理员权限，summary 对
         # 所有有仓库访问权的人可见。
         run: |
+          printf 'registry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$RUNNER_TEMP/npmrc"
           set +e
-          npm publish --access public --registry https://registry.npmjs.org/ > /tmp/publish.log 2>&1
+          NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc" \
+            npm publish --access public --registry https://registry.npmjs.org/ > /tmp/publish.log 2>&1
           code=$?
           set -e
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -150,6 +177,4 @@ jobs:
           cat /tmp/publish.log
           exit $code
         env:
-          # 必须是 NPM_TOKEN —— 这是 npm 官方约定的变量名，
-          # 换成 NODE_AUTH_TOKEN 或自定义名会导致认证失败。
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
