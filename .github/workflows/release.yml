@@ -69,9 +69,12 @@ jobs:
         # Trusted Publishing 需要 npm >= 11.5.1（更早的版本没有 oidc 交换逻辑，
         # 会静默退回 ENEEDAUTH）。Node 24 自带的 npm 版本会随时间漂移，
         # 故显式升级到最新，不依赖 runner 的捆绑版本。
-        run: npm install -g npm@latest
-        # 升级后回显版本号：若未来 npm 的 OIDC 实现有变，这里能留下证据。
-        run: npm --version
+        # 版本号一并回显：OIDC 失败时日志里能确认当时确实是新版本。
+        # 注意一个 step 只能有一个 run 键——写两个会让 GitHub 拒绝加载整个
+        # workflow（报 "'run' is already defined"），所有 job 都不会执行。
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: 检出被 release 的 tag
         uses: actions/checkout@v4

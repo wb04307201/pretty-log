@@ -117,6 +117,38 @@ test('发布步骤不应再设置凭据相关环境变量', () => {
   assert.match(publishStep(), /npm publish/, '发布步骤应直接调用 npm publish')
 })
 
+/**
+ * 每个 step 只能有一个 run 键。
+ *
+ * 这不是洁癖：写两个 run 会让 GitHub 拒绝加载整个 workflow
+ * （Invalid workflow file ... 'run' is already defined），
+ * 所有 job 都不会执行 —— 而本地用 yaml.safe_load 解析时它会
+ * 静默取最后一个，不报任何错。本地全绿、真机全红的典型案例。
+ */
+test('每个 step 不得有重复的 run 键', () => {
+  // 逐行扫描 step 体（从 "- name:" 或 "- uses:" 开始，到下一个 step 前）
+  const lines = workflow.split('\n')
+  const stepStarts = []
+  lines.forEach((line, i) => {
+    if (/^\s{6}-\s+(name|uses):/.test(line)) stepStarts.push(i)
+  })
+  assert.ok(stepStarts.length > 0, '应能识别出 step')
+
+  for (let n = 0; n < stepStarts.length; n++) {
+    const from = stepStarts[n]
+    const to = n + 1 < stepStarts.length ? stepStarts[n + 1] : lines.length
+    const nameLine = lines[from].trim()
+    const runLines = lines
+      .slice(from, to)
+      .filter((l) => /^\s{8}run:/.test(l))
+    assert.ok(
+      runLines.length <= 1,
+      `step「${nameLine}」有 ${runLines.length} 个 run 键（${runLines.length > 1 ? 'GitHub 会拒绝加载整个 workflow' : ''}）。` +
+        '合并成一个 run: | 块。'
+    )
+  }
+})
+
 test('仓库内不得出现令牌明文', () => {
   assert.doesNotMatch(
     workflow,
