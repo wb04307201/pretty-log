@@ -40,10 +40,10 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://gitee.com/wb04307201/pretty-log"
+    "url": "https://github.com/wb04307201/pretty-log"
   },
   "bugs": {
-    "url": "https://gitee.com/wb04307201/pretty-log/issues"
+    "url": "https://github.com/wb04307201/pretty-log/issues"
   },
-  "homepage": "https://gitee.com/wb04307201"
+  "homepage": "https://github.com/wb04307201"
 }

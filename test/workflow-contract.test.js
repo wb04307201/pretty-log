@@ -149,6 +149,29 @@ test('每个 step 不得有重复的 run 键', () => {
   }
 })
 
+/**
+ * package.json 的 repository.url 必须与实际发布仓库一致。
+ *
+ * npm 12 在 GitHub Actions + 公共仓库下会自动开启 provenance（见 npm CLI
+ * lib/utils/oidc.js：isDefaultProvenance 且仓库 public 时 opts.provenance = true），
+ * npm registry 会用 sigstore 校验 package.json 的 repository.url 是否与签名里的
+ * 发布仓库一致。不一致直接 E422 拒绝发布：
+ *   "repository.url is https://gitee.com/..., expected to match
+ *    https://github.com/... from provenance"
+ * 这是踩过的坑，故锁死。
+ */
+test('repository.url 必须指向 GitHub（provenance 校验依据）', () => {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')
+  )
+  const url = pkg.repository?.url ?? ''
+  assert.match(
+    url,
+    /^https:\/\/github\.com\/wb04307201\/pretty-log/,
+    'package.json 的 repository.url 必须是 GitHub 地址：npm 的 provenance 校验会拿它与实际发布仓库比对，不一致会以 E422 拒绝发布'
+  )
+})
+
 test('仓库内不得出现令牌明文', () => {
   assert.doesNotMatch(
     workflow,

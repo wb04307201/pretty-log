@@ -7,7 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `@wb04307201/pretty-log` is a frontend console-logging utility that produces styled, colored output in the browser console. It is a small TypeScript library published as an npm package.
 
 - **Package name:** `@wb04307201/pretty-log`
-- **Repository:** https://gitee.com/wb04307201/pretty-log
+- **Repository:** https://github.com/wb04307201/pretty-log
+  （Gitee 是上游 `gitee.com/wb04307201/pretty-log`，镜像同步到 GitHub。
+  但 `package.json` 的 `repository.url` 必须写 GitHub —— npm 的 provenance
+  签名会拿它与实际发布仓库比对，不一致会以 E422 拒绝发布。）
 - **License:** Apache-2.0
 
 ## Key Commands
