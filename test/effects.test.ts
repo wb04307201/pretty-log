@@ -423,3 +423,26 @@ test('R39: prefers-reduced-motion 对新词同样不触发', async () => {
     dom.teardown();
   }
 });
+
+// ---------------------------------------------------------------- R40–R41 rain 引擎
+
+test('R40: rain MAX_MS 封顶生效（6000ms 超时强收）', () => {
+  const ctx = new Proxy({} as object, { get: () => () => undefined, set: () => true }) as unknown as CanvasRenderingContext2D;
+  assert.equal(createEffectEngine('rain', 800, 600).step(ctx, 6001), true, 'rain 超 6s 必须强收');
+  assert.equal(createEffectEngine('rain', 800, 600).step(ctx, 5999), false, 'rain 5999ms 不得提前强收（粒子仍在场）');
+});
+
+test('R41: rain 自然收尾 ≤5s、有实际绘制、极端 dt 不抛错', () => {
+  let strokes = 0;
+  const ctx = new Proxy({} as object, {
+    get: (_t, k) => (k === 'stroke' ? () => { strokes++; } : () => undefined),
+    set: () => true,
+  }) as unknown as CanvasRenderingContext2D;
+  const engine = createEffectEngine('rain', 800, 600);
+  let done = false; let frames = 0;
+  while (!done && frames < 2000) { done = engine.step(ctx, 16.7); frames++; }
+  assert.ok(done, 'rain 必须收尾');
+  assert.ok(frames <= 300, `rain 应在 5s 内自然收尾，实际 ${frames} 帧`);
+  assert.ok(strokes > 0, 'rain 必须有绘制');
+  assert.doesNotThrow(() => createEffectEngine('rain', 800, 600).step(ctx, NaN), '极端 dt 不得抛错');
+});

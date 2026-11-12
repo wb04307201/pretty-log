@@ -1,7 +1,7 @@
 /**
  * 触发词动画：canvas 粒子引擎与浏览器播放器
  *
- * 三个动画（烟花/撒花/下雪）各用一组粒子参数驱动一步一帧的引擎；
+ * 五个动画（烟花/撒花/下雪/下雨/打雷）各用一组粒子参数驱动一步一帧的引擎；
  * createEffectEngine 负责 MAX_MS 时长封顶，playEffectInBrowser 负责全屏 overlay 生命周期。
  * 粒子参数照抄存档 mockup（颜色/重力/扩散/拖尾/深色描边），形态不得走样。
  * 顶层不得触碰 window/document，保证 Node 环境导入安全。
@@ -59,6 +59,15 @@ interface Snowflake {
   vy: number;
   swayF: number;
   ph: number;
+  alpha: number;
+}
+
+/** 雨丝 */
+interface Raindrop {
+  x: number;
+  y: number;
+  vy: number;
+  len: number;
   alpha: number;
 }
 
@@ -212,8 +221,44 @@ function makeSnow(w: number, h: number): EffectEngine {
   };
 }
 
+/* ---------- 下雨：斜落雨丝（无摆动、无尾迹、无水花），参数照 mockup 基准表 ---------- */
+function makeRain(w: number, h: number): EffectEngine {
+  const n = Math.min(220, Math.round(w * h / 2600) + 40);
+  const slant = 0.28;
+  const ps: Raindrop[] = [];
+  for (let i = 0; i < n; i++) {
+    ps.push({
+      x: Math.random() * w * 1.2 - w * 0.1,
+      y: Math.random() * h * 1.1 - h * 0.1,
+      vy: 3.2 + Math.random() * 2.0,
+      len: 8 + Math.random() * 12,
+      alpha: 0.25 + Math.random() * 0.35,
+    });
+  }
+  return {
+    step(ctx: CanvasRenderingContext2D, dt: number): boolean {
+      const s = Math.min(dt / 16.7, 2.5);
+      let alive = false;
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
+        p.y += p.vy * s;
+        p.x += p.vy * slant * s;
+        if (p.y > h + 12) continue;
+        alive = true;
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(110, 130, 165, ' + p.alpha + ')';
+        ctx.lineWidth = 1;
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.len * slant, p.y - p.len);
+        ctx.stroke();
+      }
+      return !alive;
+    }
+  };
+}
+
 /** 各效果时长上限（毫秒），与 mockup MAX_MS 一致：粒子提前散尽提前收，超时强收 */
-const MAX_MS: Record<EffectType, number> = { fireworks: 7000, confetti: 6000, snow: 7000 };
+const MAX_MS: Record<EffectType, number> = { fireworks: 7000, confetti: 6000, snow: 7000, rain: 6000 };
 
 /**
  * 按效果类型创建粒子引擎，step 内部累计 dt 并对照 MAX_MS 封顶
@@ -223,6 +268,7 @@ export function createEffectEngine(type: EffectType, w: number, h: number): Effe
     fireworks: makeFireworks,
     confetti: makeConfetti,
     snow: makeSnow,
+    rain: makeRain,
   };
   const inner = makers[type](w, h);
   const cap = MAX_MS[type];

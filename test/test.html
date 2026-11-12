@@ -17,6 +17,7 @@
     <button id="fx-btn-fireworks">info('烟花')</button>
     <button id="fx-btn-confetti">info('撒花')</button>
     <button id="fx-btn-snow">info('下雪')</button>
+    <button id="fx-btn-rain">info('下雨')</button>
     <button id="fx-btn-toggle">关闭彩蛋</button>
 </section>
 <script type="module">
@@ -165,12 +166,13 @@
     prettyLog.info("百分号", "完成 50%")
 
     // ===== 触发词彩蛋演示 =====
-    // 三个按钮分别输出带触发词的日志（单击触发一次，可感受冷却）；
+    // 各按钮分别输出带触发词的日志（单击触发一次，可感受冷却）；
     // 「关闭彩蛋」开关走 setEffects({ enabled }) 一键启停。
     console.log('--- 触发词彩蛋 ---')
     document.getElementById('fx-btn-fireworks').addEventListener('click', () => prettyLog.info('烟花'))
     document.getElementById('fx-btn-confetti').addEventListener('click', () => prettyLog.info('撒花'))
     document.getElementById('fx-btn-snow').addEventListener('click', () => prettyLog.info('下雪'))
+    document.getElementById('fx-btn-rain').addEventListener('click', () => prettyLog.info('下雨'))
     const fxToggleBtn = document.getElementById('fx-btn-toggle')
     fxToggleBtn.addEventListener('click', () => {
         const enabled = !prettyLog.getEffects().enabled
