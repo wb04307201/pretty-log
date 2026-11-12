@@ -112,3 +112,27 @@ test('R25: 连发 100 次命中只播一次（防轰炸）', () => {
   for (let i = 0; i < 100; i++) rt.handle('烟花', opts(), play);
   assert.equal(plays, 1);
 });
+
+import { createEffectEngine, playEffectInBrowser } from '../src/effects-render.ts';
+
+test('R26: 三个引擎在 MAX_MS 对应帧数内必然收尾', () => {
+  const ctx = new Proxy({} as object, {
+    get: () => () => undefined,
+    set: () => true,
+  }) as unknown as CanvasRenderingContext2D;
+  const limits = { fireworks: 7000, confetti: 6000, snow: 7000 } as const;
+  for (const type of ['fireworks', 'confetti', 'snow'] as const) {
+    const engine = createEffectEngine(type, 800, 600);
+    let done = false;
+    let frames = 0;
+    while (!done && frames < 2000) { done = engine.step(ctx, 16.7); frames++; }
+    assert.ok(done, `${type} 必须收尾`);
+    assert.ok(frames <= Math.ceil(limits[type] / 16.7) + 1, `${type} 帧数超出时长上限`);
+  }
+});
+
+test('R27: 无 DOM 环境 playEffectInBrowser 立即 onEnd 且不抛错', () => {
+  let ended = 0;
+  playEffectInBrowser('fireworks', () => { ended++; });
+  assert.equal(ended, 1);
+});
