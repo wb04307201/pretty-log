@@ -30,3 +30,7 @@ yarn-error.log*
 
 # 浏览器自动化产出的快照/日志；其中可能混入 2FA 恢复码等敏感内容
 /.playwright-mcp/
+
+# 本地产物：Claude 技能暂存区、git worktree 工作区
+.superpowers/
+.worktrees/
