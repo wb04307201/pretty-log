@@ -194,12 +194,24 @@ prettyLog.info('这条不会出现');
 
 | 触发词 | 动画 |
 |---|---|
+| 打雷 | `lightning` |
+| 雷人 | `lightning` |
+| 下雨 | `rain` |
+| 暴雨 | `rain` |
+| 翻车了 | `rain` |
+| 凉了 | `rain` |
+| 寄了 | `rain` |
+| 芭比Q了 | `rain` |
+| 下雪 | `snow` |
+| 雪花 | `snow` |
+| 初雪 | `snow` |
 | 烟花 | `fireworks` |
 | 撒花 | `confetti` |
 | 庆祝 | `confetti` |
 | 好耶 | `confetti` |
-| 下雪 | `snow` |
-| 雪花 | `snow` |
+| 恭喜 | `confetti` |
+
+键序即命中优先级：坏消息词排前——「庆祝上线翻车了」播的是下雨（翻车了 胜过 庆祝），「庆祝上线打雷了」播的是打雷。
 
 ```javascript
 import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pretty-log';

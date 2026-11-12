@@ -8,7 +8,7 @@
 /**
  * 动画效果类型
  */
-export type EffectType = 'fireworks' | 'confetti' | 'snow';
+export type EffectType = 'fireworks' | 'confetti' | 'snow' | 'rain' | 'lightning';
 
 /**
  * 效果配置项，各字段均可缺省，由 setEffects/configure 做部分合并
@@ -29,12 +29,11 @@ export interface EffectsOptions {
  * 默认触发词表（键序即命中优先级，均为 ≥2 字符的词组）
  */
 export const DEFAULT_EFFECT_TRIGGERS: Record<string, EffectType> = {
+  '打雷': 'lightning', '雷人': 'lightning',
+  '下雨': 'rain', '暴雨': 'rain', '翻车了': 'rain', '凉了': 'rain', '寄了': 'rain', '芭比Q了': 'rain',
+  '下雪': 'snow', '雪花': 'snow', '初雪': 'snow',
   '烟花': 'fireworks',
-  '撒花': 'confetti',
-  '庆祝': 'confetti',
-  '好耶': 'confetti',
-  '下雪': 'snow',
-  '雪花': 'snow',
+  '撒花': 'confetti', '庆祝': 'confetti', '好耶': 'confetti', '恭喜': 'confetti',
 };
 
 /**

@@ -12,12 +12,11 @@ const opts = (over: Partial<EffectsOptions> = {}): Required<EffectsOptions> => (
 
 test('R16: 默认触发词表精确、均≥2字符、默认状态正确', () => {
   assert.deepEqual(DEFAULT_EFFECT_TRIGGERS, {
+    '打雷': 'lightning', '雷人': 'lightning',
+    '下雨': 'rain', '暴雨': 'rain', '翻车了': 'rain', '凉了': 'rain', '寄了': 'rain', '芭比Q了': 'rain',
+    '下雪': 'snow', '雪花': 'snow', '初雪': 'snow',
     '烟花': 'fireworks',
-    '撒花': 'confetti',
-    '庆祝': 'confetti',
-    '好耶': 'confetti',
-    '下雪': 'snow',
-    '雪花': 'snow',
+    '撒花': 'confetti', '庆祝': 'confetti', '好耶': 'confetti', '恭喜': 'confetti',
   });
   for (const key of Object.keys(DEFAULT_EFFECT_TRIGGERS)) {
     assert.ok(key.length >= 2, `触发词「${key}」必须是词组，不收单字`);
@@ -352,6 +351,75 @@ test('R34: 非法触发值在配置时被过滤并告警，合法项照常触发
     assert.equal(dom.created, 1);
   } finally {
     console.warn = origWarn;
+    dom.teardown();
+  }
+});
+
+// ---------------------------------------------------------------- R35–R39 词表扩容（rain/lightning 进类型系统）
+
+test('R35: 键序即优先级，坏消息胜过好消息', () => {
+  assert.deepEqual(Object.keys(DEFAULT_EFFECT_TRIGGERS),
+    ['打雷', '雷人', '下雨', '暴雨', '翻车了', '凉了', '寄了', '芭比Q了', '下雪', '雪花', '初雪', '烟花', '撒花', '庆祝', '好耶', '恭喜']);
+  assert.equal(matchEffect('庆祝上线打雷了', DEFAULT_EFFECT_TRIGGERS), 'lightning'); // 打雷胜过庆祝
+  assert.equal(matchEffect('庆祝上线翻车了', DEFAULT_EFFECT_TRIGGERS), 'rain');      // 翻车了胜过庆祝（词表为准，非劈雷）
+  assert.equal(matchEffect('恭喜下雪了', DEFAULT_EFFECT_TRIGGERS), 'snow');          // 下雪胜过恭喜
+});
+
+test('R36: 新词逐个映射正确，小写变体不误触发', () => {
+  const t = DEFAULT_EFFECT_TRIGGERS;
+  for (const w of ['打雷', '雷人']) assert.equal(matchEffect(w, t), 'lightning', w);
+  for (const w of ['下雨', '暴雨', '翻车了', '凉了', '寄了', '芭比Q了']) assert.equal(matchEffect(w, t), 'rain', w);
+  for (const w of ['下雪', '雪花', '初雪']) assert.equal(matchEffect(w, t), 'snow', w);
+  assert.equal(matchEffect('恭喜', t), 'confetti');
+  assert.equal(matchEffect('芭比q了', t), null); // 英文大小写敏感
+});
+
+test('R37: rain/lightning 通过非法值过滤，告警列全五种类型', async () => {
+  const mod = await import(`../src/index.ts?r37=${Date.now()}`); // R30 缓存击穿：全新运行时
+  const dom = installFakeDom();
+  const warns: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (...args: unknown[]): void => { warns.push(args.map(String).join(' ')); };
+  try {
+    mod.setEffects({ cooldownMs: 0, triggers: { '下雨': 'rain', '打雷': 'lightning', '坏词': 'boom' } as unknown as Record<string, EffectType> });
+    assert.deepEqual(mod.getEffects().triggers, { '下雨': 'rain', '打雷': 'lightning' }); // 新类型放行，非法值丢弃
+    assert.equal(warns.length, 1);
+    assert.ok(warns[0].includes('rain') && warns[0].includes('lightning') && warns[0].includes('fireworks'),
+      `告警应列出全部合法类型，实际：${warns[0]}`);
+    mod.info('坏词');
+    assert.equal(dom.created, 0);
+    mod.info('下雨');
+    assert.equal(dom.created, 1); // 过滤后照常全链路触发
+  } finally {
+    console.warn = origWarn;
+    dom.teardown();
+  }
+});
+
+test('R38: 生产环境对新词同样不触发', async () => {
+  // R30 手法：先置 NODE_ENV=production 再缓存击穿 import，finally 恢复
+  const dom = installFakeDom();
+  const prev = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = 'production';
+    const mod = await import(`../src/index.ts?r38=${Date.now()}`);
+    mod.info('下雨了');
+    mod.info('打雷了');
+    assert.equal(dom.created, 0);
+  } finally {
+    if (prev === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prev;
+    dom.teardown();
+  }
+});
+
+test('R39: prefers-reduced-motion 对新词同样不触发', async () => {
+  const dom = installFakeDom({ reducedMotion: true });
+  try {
+    const mod = await import(`../src/index.ts?r39=${Date.now()}`); // 全新运行时，冷却不干扰
+    mod.setEffects({ cooldownMs: 0 });
+    mod.info('打雷了');
+    assert.equal(dom.created, 0);
+  } finally {
     dom.teardown();
   }
 });

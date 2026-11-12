@@ -185,7 +185,7 @@ class HistoryBuffer {
  * 合法动画效果类型判定（防御未类型化调用方传入非法触发值）
  */
 const isValidEffectType = (value: unknown): value is EffectType =>
-  value === 'fireworks' || value === 'confetti' || value === 'snow';
+  value === 'fireworks' || value === 'confetti' || value === 'snow' || value === 'rain' || value === 'lightning';
 
 /**
  * 过滤非法触发值：每个被丢弃的键 console.warn 一次（告警含键与非法值）。
@@ -197,7 +197,7 @@ const sanitizeTriggers = (triggers: Record<string, unknown>): Record<string, Eff
     if (isValidEffectType(type)) {
       filtered[word] = type;
     } else {
-      console.warn(`[pretty-log] 触发词「${word}」的动画类型「${String(type)}」非法，已忽略（仅支持 fireworks / confetti / snow）`);
+      console.warn(`[pretty-log] 触发词「${word}」的动画类型「${String(type)}」非法，已忽略（仅支持 fireworks / confetti / snow / rain / lightning）`);
     }
   }
   return filtered;

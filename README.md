@@ -197,12 +197,24 @@ Default trigger table:
 
 | Trigger word | Animation |
 |---|---|
+| 打雷 | `lightning` |
+| 雷人 | `lightning` |
+| 下雨 | `rain` |
+| 暴雨 | `rain` |
+| 翻车了 | `rain` |
+| 凉了 | `rain` |
+| 寄了 | `rain` |
+| 芭比Q了 | `rain` |
+| 下雪 | `snow` |
+| 雪花 | `snow` |
+| 初雪 | `snow` |
 | 烟花 | `fireworks` |
 | 撒花 | `confetti` |
 | 庆祝 | `confetti` |
 | 好耶 | `confetti` |
-| 下雪 | `snow` |
-| 雪花 | `snow` |
+| 恭喜 | `confetti` |
+
+Key order is match priority: bad-news words come first, so '庆祝上线翻车了' plays rain (翻车了 beats 庆祝).
 
 ```javascript
 import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pretty-log';
