@@ -41,3 +41,15 @@ export const DEFAULT_EFFECT_TRIGGERS: Record<string, EffectType> = {
  * 默认触发冷却时间（毫秒）
  */
 export const DEFAULT_EFFECT_COOLDOWN_MS = 2000;
+
+/**
+ * 触发词匹配：按 triggers 插入序遍历，第一个 text.includes(key) 命中的键返回其动画类型。
+ * 空串键跳过（includes('') 恒真，必须显式排除）；大小写敏感；无命中返回 null。
+ */
+export function matchEffect(text: string, triggers: Record<string, EffectType>): EffectType | null {
+  for (const [key, effect] of Object.entries(triggers)) {
+    if (key.length === 0) continue; // 空键恒真，跳过
+    if (text.includes(key)) return effect;
+  }
+  return null;
+}

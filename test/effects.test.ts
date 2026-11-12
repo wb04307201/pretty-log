@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_EFFECT_TRIGGERS, DEFAULT_EFFECT_COOLDOWN_MS } from '../src/effects.ts';
+import { DEFAULT_EFFECT_TRIGGERS, DEFAULT_EFFECT_COOLDOWN_MS, matchEffect, type EffectType } from '../src/effects.ts';
 import { configure, setEffects, getEffects } from '../src/index.ts';
 
 test('R16: 默认触发词表精确、均≥2字符、默认状态正确', () => {
@@ -39,4 +39,23 @@ test('R17: configure/setEffects 部分合并，triggers 整表替换', () => {
   } finally {
     setEffects({ enabled: true, triggers: { ...DEFAULT_EFFECT_TRIGGERS }, cooldownMs: 2000 });
   }
+});
+
+test('R18: 多词命中取映射表中第一个匹配项', () => {
+  assert.equal(matchEffect('烟花和撒花', DEFAULT_EFFECT_TRIGGERS), 'fireworks');
+  const reversed: Record<string, EffectType> = { '撒花': 'confetti', '烟花': 'fireworks' };
+  assert.equal(matchEffect('烟花和撒花', reversed), 'confetti');   // 换映射顺序结果跟着换
+});
+
+test('R19: 大小写敏感、空键忽略', () => {
+  const t: Record<string, EffectType> = { 'OK': 'confetti', '': 'snow' };
+  assert.equal(matchEffect('ok ok OK', t), 'confetti');            // 只有原文大写 OK 命中
+  assert.equal(matchEffect('ok', t), null);                        // 小写不命中；空键不得命中一切
+});
+
+test('R20: 自定义词表生效，无命中返回 null', () => {
+  const t: Record<string, EffectType> = { '恭喜': 'snow' };
+  assert.equal(matchEffect('恭喜发财', t), 'snow');
+  assert.equal(matchEffect('普通日志', t), null);
+  assert.equal(matchEffect('普通日志', DEFAULT_EFFECT_TRIGGERS), null);
 });
