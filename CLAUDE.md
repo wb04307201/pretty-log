@@ -18,42 +18,77 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Command | Description |
 |---------|-------------|
 | `yarn build` | Build the library with Parcel (outputs to `dist/`) |
-| `yarn release` | Clean, build, and publish to npm (public access) |
-| `yarn test` | Open `test/test.html` in a browser via Parcel dev server |
+| `yarn test:unit` | Run all unit tests (Node's built-in test runner; includes network-dependent tests) |
+| `yarn test:unit:offline` | Run only offline tests (excludes `ci-publish.test.js`, which hits the npm registry) — this is what CI runs |
+| `yarn test` | Open `test/test.html` in a browser via Parcel dev server (manual visual check) |
+| `yarn verify:tag <tag>` | Verify a git tag matches `package.json` version (used in release CI) |
+| `npx tsc --noEmit` | Type-check (tsconfig is strict; `test/**` is excluded) |
 | `yarn install` | Install dependencies |
+
+Run a single test file: `node --experimental-strip-types --test test/core.test.ts`
+Run tests matching a name: add `--test-name-pattern="R1"`.
+
+Note: `test:unit` requires Node ≥ 22.6 (`--experimental-strip-types`; tests import `../src/index.ts` directly). CI pins Node 24.
 
 ## Architecture
 
 The entire library lives in a single file: `src/index.ts`. All public APIs are named exports:
 
 ### Log functions
-- **`debug` / `info` / `error` / `warning` / `success`** — Styled log boxes with color-coded borders. Created via a `makeLogger` factory that accepts a default title, color, and log level. With a single argument, a default title is used. With multiple arguments, the first is the title.
-- **`rainbow`** — Prints text with a CSS rainbow gradient background.
-- **`group`** — Wraps content in a `console.group` / `console.groupCollapsed` with styled header. Uses `try...finally` to guarantee `groupEnd()`.
-- **`table`** — Thin wrapper around `console.table` for object arrays or plain objects.
-- **`picture`** — Loads an image from a URL, draws it to a canvas, and prints it to the console via background-image CSS trickery. Has `onerror` handler for load failures.
-- **`time` / `timeEnd`** — Custom timers using `performance.now()` stored in a module-level `Map<string, number>`. Uses `has()` for safe lookup (handles `startTime === 0`).
+- **`debug` / `info` / `error` / `warning` / `success`** — Styled log boxes with color-coded borders, created via a `makeLogger` factory. With a single argument, a default title is used; with multiple arguments, the first is the title.
+- **`rainbow`** — Text with a CSS rainbow gradient background.
+- **`group`** — Wraps content in `console.group`/`console.groupCollapsed` with a styled header; `try...finally` guarantees `groupEnd()`.
+- **`table`** — Wrapper around `console.table`; goes through level filtering and writes to history like other log functions.
+- **`picture`** — Loads an image, draws to canvas, prints via background-image CSS. Has `onerror` handler.
+- **`time` / `timeEnd` / `timer`** — Timers using `performance.now()` in a module-level `Map`. `timer(label, fn)` wraps a sync or async (thenable) function and guarantees `done()` on exception paths and after promise settlement.
+- **`once(key, ...)`** / `clearOnce()` — Log a key only on first call.
+- **`count(key)`** / `countSummary()` / `clearCounters()` — Count calls per key.
+- **`assert(condition, message)`** — On failure, logs via the error channel and throws.
+- **`withPrefix(prefix)`** — Returns a logger with a fixed title prefix.
 
 ### Configuration API
-- **`configure(options)`** — One-shot configuration (logLevel, theme, showEmoji, showTimestamp, historySize).
-- **`setLogLevel(level)`** — Set log level: `'debug' | 'info' | 'warn' | 'error' | 'none'`.
-- **`setTheme(partial)`** — Merge partial theme overrides.
-- **`showEmoji(enabled)`** / **`showTimestamp(enabled)`** — Toggle features.
-- **`getHistory()` / `clearHistory()`** — Access and clear the log history buffer.
+- **`configure(options)`** — One-shot config: logLevel, theme, styles, showEmoji, showTimestamp, historySize.
+- **`setLogLevel` / `setTheme` / `setStyles` / `setHistorySize` / `showEmoji` / `showTimestamp`** — Individual setters. Theme/`setStyles` changes take effect at call time (colors/styles are read per call, not captured at module load).
+- **`getHistory()` / `clearHistory()`** — Log history buffer (fixed-size ring buffer, default 200; history stores snapshots, not live references).
 
-### Internal components
-- **`ConfigManager`** — Global singleton managing log level, theme, emoji, timestamp, and history settings.
-- **`HistoryBuffer`** — Fixed-size ring buffer for log history (configurable size, default 200).
-- **`stringify(value)`** — Converts any `LogContent` to string. Uses `WeakSet` replacer to handle circular references safely.
-- **`prettyPrint(title, text, color, level)`** — Core formatting engine that builds `%c`-styled `console.log` calls. Respects log level filtering and writes to history.
+### Internal behavior worth knowing
+- **Production strip:** all logging functions are no-ops when `process.env.NODE_ENV === 'production'` (`IS_PRODUCTION` check in `src/index.ts`). Tests cover this.
+- **`stringify(value)`** — Converts any `LogContent` to string. Distinguishes circular references from shared references (DAG) via an ancestor-chain stack, not a visited-set; formats `Error`/`Map`/`Set` meaningfully. User content is escaped (`%` → `%%`) so `%c`/`%s` in data can't corrupt styling.
+- **`prettyPrint(title, text, color, level)`** — Core formatting engine building `%c`-styled `console.log` calls. Respects log level filtering and writes to history.
+- **`ConfigManager`** — Global singleton holding log level, theme, styles, emoji, timestamp, history settings.
 
 ### Build
-
-- **Parcel** handles bundling (`yarn build`), driven by `package.json` `source` and `main`/`module`/`types` fields.
-- **Parcel TypeScript packager** (`@parcel/packager-ts`, `@parcel/transformer-typescript-types`) produces `dist/main.js`, `dist/module.js`, and `dist/types.d.ts`.
-- **tsconfig.json** targets ES2015 with ES2017+DOM lib, CommonJS modules, strict mode enabled, root dir `src/`, output dir `dist/`.
-- **Package manager:** yarn (lock file: `yarn.lock`).
+- **Parcel** bundles via `package.json` `source`/`main`/`module`/`types` fields; `@parcel/packager-ts` emits `dist/main.js`, `dist/module.js`, `dist/types.d.ts`.
+- tsconfig targets ES2015 (lib ES2017+DOM), CommonJS, strict mode. Package manager: yarn.
 
 ## Testing
 
-There is no automated test framework. Testing is done manually by running `yarn test`, which serves `test/test.html` via Parcel's dev server — open the browser console to see all API outputs.
+Tests use **Node's built-in test runner** (`node:test` + `node:assert/strict`), no external framework. Test files:
+
+- `test/core.test.ts` — Regression tests for confirmed defects (numbered R1–R4), e.g. `setTheme` taking effect at call time, history sizing, circular-vs-shared ref detection.
+- `test/features.test.ts` — Regression tests for fixes and features (R5–R15), e.g. `%c` escaping, emoji mapping, `once`/`count`/`timer`/`withPrefix`/`assert`, production strip.
+- `test/ci.test.js` — Tests for `scripts/verify-tag-version.js`.
+- `test/ci-publish.test.js` — Tests for `scripts/check-version-published.js`; some cases hit the npm registry and self-skip when it's unreachable.
+- `test/workflow-contract.test.js` — Contract tests asserting the auth wiring in `.github/workflows/release.yml` (e.g. `id-token: write` must exist). OIDC misconfiguration fails silently as ENEEDAUTH at release time, so these tests turn it into an early failure. Assertions target YAML keys/structure, ignoring comment lines — don't let them drift into testing comments.
+
+Tests monkey-patch `console.*` to capture output; they reset global config between cases to avoid cross-contamination. The repo follows a TDD, RED-first convention — new regression tests are written before the fix.
+
+For visual/manual checks, `yarn test` serves `test/test.html`, which uses `test/console-panel.js` to mirror console output onto a DOM panel (parses the `%c` format strings into styled spans).
+
+## Release Pipeline
+
+Publishing is **not** done locally — there is no `yarn release` script. It is driven by a GitHub Release:
+
+1. Tag `vX.Y.Z` on Gitee (`npm version patch` first — tag must match `package.json`); Gitee's mirror syncs the tag to GitHub.
+2. Create a GitHub Release for that tag → `.github/workflows/release.yml` runs: `verify-tag-version.js` → idempotency check (`check-version-published.js`) → unit tests (`test:unit:offline`) → type check → build → publish to npm.
+
+Full docs: `RELEASING.md`. Key facts that have caused real failures:
+
+- **Trigger is `release: types: [created]`, not tag push** — Gitee mirror syncs tags via the GitHub API (no `push` event fires), so tag-push triggers never run.
+- **Trusted Publishing (OIDC), no `NPM_TOKEN`** — npm binds "GitHub Actions + wb04307201/pretty-log + release.yml" as trusted publisher (binding is immutable after creation). Requires npm ≥ 11.5.1 (workflow upgrades npm explicitly). Missing `id-token: write` fails silently as ENEEDAUTH.
+- **No `registry-url` in `actions/setup-node`** — it writes a `${NODE_AUTH_TOKEN}` `.npmrc` that yarn 1 can't interpolate (`Failed to replace env in config`), breaking install before publish.
+- **One `run:` key per step** — a duplicate key makes the whole workflow fail to load.
+- **`package.json` `repository.url` must point at GitHub** — npm provenance compares it to the publishing repo; mismatch → E422.
+- **Idempotency** — `check-version-published.js` exit codes: 0=already published (skip), 1=not published (continue), 2=check failed (abort). Protects against double-triggering.
+
+Conventions: commit messages and code comments are written in Chinese, using conventional-commit prefixes (`fix(pkg):`, `fix(ci):`, `chore(ci):`).
