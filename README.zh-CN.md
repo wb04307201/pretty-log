@@ -187,5 +187,36 @@ prettyLog.info('这条不会出现');
 
 注意：生产环境下 `timer` 仍会执行你传入的函数，只是日志被抑制。
 
+### 触发词动画（彩蛋）
+日志文本命中触发词时，页面上会播放一个全屏粒子动画。按词表顺序做大小写敏感的子串匹配，首个命中生效；一次日志调用最多播一个动画，连续触发只播一次（播完约 2 秒冷却）。
+
+默认词表：
+
+| 触发词 | 动画 |
+|---|---|
+| 烟花 | `fireworks` |
+| 撒花 | `confetti` |
+| 庆祝 | `confetti` |
+| 好耶 | `confetti` |
+| 下雪 | `snow` |
+| 雪花 | `snow` |
+
+```javascript
+import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pretty-log';
+
+// setEffects({ triggers }) 会整表替换 —— 展开
+// DEFAULT_EFFECT_TRIGGERS 可在保留默认词的基础上扩展
+setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '好耶': 'confetti' } });
+
+// 一键关闭
+setEffects({ enabled: false });
+
+// 也可以通过 configure() 配置
+configure({ effects: { enabled: true, cooldownMs: 2000 } });
+```
+
+说明：`NODE_ENV=production` 时不播动画。
+说明：用户开启 `prefers-reduced-motion: reduce` 时不播动画。
+
 ## 输出
 ![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)

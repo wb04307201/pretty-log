@@ -190,5 +190,36 @@ prettyLog.info('this never shows up');
 
 Note: `timer` still runs the function you give it in production — only the logging is suppressed.
 
+### Trigger-Word Animations (Easter Egg)
+When the stringified log text contains a trigger word, a full-screen particle animation plays in the page. Matching is a case-sensitive substring check in table order — the first hit wins, one animation per log call, and consecutive hits only play once (about a 2-second cooldown after each play).
+
+Default trigger table:
+
+| Trigger word | Animation |
+|---|---|
+| 烟花 | `fireworks` |
+| 撒花 | `confetti` |
+| 庆祝 | `confetti` |
+| 好耶 | `confetti` |
+| 下雪 | `snow` |
+| 雪花 | `snow` |
+
+```javascript
+import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pretty-log';
+
+// setEffects({ triggers }) replaces the whole table — spread
+// DEFAULT_EFFECT_TRIGGERS to keep the defaults and extend them
+setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '好耶': 'confetti' } });
+
+// One-shot kill switch
+setEffects({ enabled: false });
+
+// Also configurable through configure()
+configure({ effects: { enabled: true, cooldownMs: 2000 } });
+```
+
+Note: no animation plays when `NODE_ENV=production`.
+Note: no animation plays when the user prefers reduced motion (`prefers-reduced-motion: reduce`).
+
 ## Output
 ![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)

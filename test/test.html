@@ -6,6 +6,19 @@
     <link rel="stylesheet" href="./console-panel.css">
 </head>
 <body>
+<!-- 触发词彩蛋演示区：悬浮于 console 面板之上（面板 z-index 1000）。
+     动画画布 z-index 99999 但 pointer-events:none，播放期间按钮照常可点。 -->
+<section id="fx-demo"
+         style="position:fixed;top:8px;right:8px;z-index:1001;max-width:380px;
+                background:#292a2d;color:#e8eaed;border:1px solid #3c4043;border-radius:6px;
+                padding:10px 12px;font:13px/1.6 Consolas,'Microsoft YaHei',sans-serif;">
+    <strong style="display:block;margin-bottom:4px;">触发词彩蛋</strong>
+    <p style="margin:0 0 8px;color:#9aa0a6;">点击按钮输出带触发词的日志即可播放动画：连续触发只播一次，播完约 2 秒冷却。</p>
+    <button id="fx-btn-fireworks">info('烟花')</button>
+    <button id="fx-btn-confetti">info('撒花')</button>
+    <button id="fx-btn-snow">info('下雪')</button>
+    <button id="fx-btn-toggle">关闭彩蛋</button>
+</section>
 <script type="module">
     // 必须最先安装面板，才能捕获后续所有日志
     import { installConsolePanel } from './console-panel.js'
@@ -150,6 +163,20 @@
     console.log('--- 百分号转义 ---')
     prettyLog.info("注入测试", "这里有 %c 和 %s，应该原样显示")
     prettyLog.info("百分号", "完成 50%")
+
+    // ===== 触发词彩蛋演示 =====
+    // 三个按钮分别输出带触发词的日志（单击触发一次，可感受冷却）；
+    // 「关闭彩蛋」开关走 setEffects({ enabled }) 一键启停。
+    console.log('--- 触发词彩蛋 ---')
+    document.getElementById('fx-btn-fireworks').addEventListener('click', () => prettyLog.info('烟花'))
+    document.getElementById('fx-btn-confetti').addEventListener('click', () => prettyLog.info('撒花'))
+    document.getElementById('fx-btn-snow').addEventListener('click', () => prettyLog.info('下雪'))
+    const fxToggleBtn = document.getElementById('fx-btn-toggle')
+    fxToggleBtn.addEventListener('click', () => {
+        const enabled = !prettyLog.getEffects().enabled
+        prettyLog.setEffects({ enabled })
+        fxToggleBtn.textContent = enabled ? '关闭彩蛋' : '开启彩蛋'
+    })
 </script>
 </body>
 </html>
