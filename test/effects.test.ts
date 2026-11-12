@@ -446,3 +446,22 @@ test('R41: rain 自然收尾 ≤5s、有实际绘制、极端 dt 不抛错', () 
   assert.ok(strokes > 0, 'rain 必须有绘制');
   assert.doesNotThrow(() => createEffectEngine('rain', 800, 600).step(ctx, NaN), '极端 dt 不得抛错');
 });
+
+// ---------------------------------------------------------------- R42 lightning 引擎
+
+test('R42: lightning 2s 内收尾，有闪白与折线绘制，极端 dt 不抛错', () => {
+  let fills = 0; let strokes = 0;
+  const ctx = new Proxy({} as object, {
+    get: (_t, k) => (k === 'fillRect' ? () => { fills++; } : k === 'stroke' ? () => { strokes++; } : () => undefined),
+    set: () => true,
+  }) as unknown as CanvasRenderingContext2D;
+  const engine = createEffectEngine('lightning', 800, 600);
+  let done = false; let frames = 0;
+  while (!done && frames < 2000) { done = engine.step(ctx, 16.7); frames++; }
+  assert.ok(done, 'lightning 必须收尾');
+  assert.ok(frames <= 120, `lightning 应在 2s 内收尾，实际 ${frames} 帧`);
+  assert.ok(fills > 0, '必须有全屏闪白');
+  assert.ok(strokes > 0, '必须有折线绘制');
+  assert.equal(createEffectEngine('lightning', 800, 600).step(ctx, 3001), true, 'lightning 超 3s 必须强收');
+  assert.doesNotThrow(() => createEffectEngine('lightning', 800, 600).step(ctx, NaN), '极端 dt 不得抛错');
+});

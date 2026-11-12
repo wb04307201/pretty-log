@@ -257,8 +257,49 @@ function makeRain(w: number, h: number): EffectEngine {
   };
 }
 
+/* ---------- 打雷：单次一击锯齿折线闪电（深色底衬 + 白芯，浅色页面也看得清），参数照 mockup 基准表 ---------- */
+function makeLightning(w: number, h: number): EffectEngine {
+  // 中点位移生成锯齿折线：初始两点（起点/落点），5 轮细分段数翻倍，终态 33 点
+  let pts: number[][] = [
+    [w * (0.3 + Math.random() * 0.4), -10],
+    [w * (0.2 + Math.random() * 0.6), h * (0.55 + Math.random() * 0.3)],
+  ];
+  for (let round = 0; round < 5; round++) {
+    const next: number[][] = [pts[0]];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const segLen = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+      next.push([(a[0] + b[0]) / 2 + (Math.random() - 0.5) * segLen * 0.5, (a[1] + b[1]) / 2]); // x 水平位移，y 不动
+      next.push(b);
+    }
+    pts = next;
+  }
+  let t = 0;
+  return {
+    step(ctx: CanvasRenderingContext2D, dt: number): boolean {
+      t += dt;
+      const glow = t < 100 ? 1 : Math.max(0, 1 - (t - 100) / 900);
+      if (t < 100) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)'; // 全屏闪白约 100ms
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.beginPath(); // 单次一击：同一折线路径描两遍（深衬 → 白芯），余晖渐隐
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.strokeStyle = 'rgba(25, 35, 70, ' + glow * 0.55 + ')'; // 深色底衬：浅底可见性的关键
+      ctx.lineWidth = 7;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 255, 255, ' + glow + ')'; // 白芯
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      return t > 100 + 900;
+    }
+  };
+}
+
 /** 各效果时长上限（毫秒），与 mockup MAX_MS 一致：粒子提前散尽提前收，超时强收 */
-const MAX_MS: Record<EffectType, number> = { fireworks: 7000, confetti: 6000, snow: 7000, rain: 6000 };
+const MAX_MS: Record<EffectType, number> = { fireworks: 7000, confetti: 6000, snow: 7000, rain: 6000, lightning: 3000 };
 
 /**
  * 按效果类型创建粒子引擎，step 内部累计 dt 并对照 MAX_MS 封顶
@@ -269,6 +310,7 @@ export function createEffectEngine(type: EffectType, w: number, h: number): Effe
     confetti: makeConfetti,
     snow: makeSnow,
     rain: makeRain,
+    lightning: makeLightning,
   };
   const inner = makers[type](w, h);
   const cap = MAX_MS[type];

@@ -18,6 +18,7 @@
     <button id="fx-btn-confetti">info('撒花')</button>
     <button id="fx-btn-snow">info('下雪')</button>
     <button id="fx-btn-rain">info('下雨')</button>
+    <button id="fx-btn-lightning">info('打雷')</button>
     <button id="fx-btn-toggle">关闭彩蛋</button>
 </section>
 <script type="module">
@@ -173,6 +174,7 @@
     document.getElementById('fx-btn-confetti').addEventListener('click', () => prettyLog.info('撒花'))
     document.getElementById('fx-btn-snow').addEventListener('click', () => prettyLog.info('下雪'))
     document.getElementById('fx-btn-rain').addEventListener('click', () => prettyLog.info('下雨'))
+    document.getElementById('fx-btn-lightning').addEventListener('click', () => prettyLog.info('打雷'))
     const fxToggleBtn = document.getElementById('fx-btn-toggle')
     fxToggleBtn.addEventListener('click', () => {
         const enabled = !prettyLog.getEffects().enabled
