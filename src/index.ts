@@ -1,3 +1,13 @@
+import {
+  DEFAULT_EFFECT_TRIGGERS,
+  DEFAULT_EFFECT_COOLDOWN_MS,
+  type EffectType,
+  type EffectsOptions,
+} from './effects.ts';
+
+export type { EffectType, EffectsOptions };
+export { DEFAULT_EFFECT_TRIGGERS };
+
 type LogContent = string | number | boolean | object | null | undefined;
 
 /**
@@ -179,6 +189,9 @@ class ConfigManager {
   private _showEmoji: boolean = false;
   private _showTimestamp: boolean = false;
   private _historySize: number = DEFAULT_HISTORY_SIZE;
+  private _effectsEnabled: boolean = true;
+  private _effectTriggers: Record<string, EffectType> = { ...DEFAULT_EFFECT_TRIGGERS };
+  private _effectCooldownMs: number = DEFAULT_EFFECT_COOLDOWN_MS;
   private _history: HistoryBuffer;
 
   constructor() {
@@ -258,6 +271,27 @@ class ConfigManager {
     for (const key of Object.keys(partial) as (keyof Theme)[]) {
       this._theme[key] = partial[key]!;
     }
+  }
+
+  /**
+   * 合并部分效果配置：只处理显式提供（!== undefined）的项；
+   * triggers 传入即整表替换（允许 {}），未提及项不动
+   */
+  applyEffects(partial: EffectsOptions): void {
+    if (partial.enabled !== undefined) this._effectsEnabled = partial.enabled;
+    if (partial.cooldownMs !== undefined) this._effectCooldownMs = partial.cooldownMs;
+    if (partial.triggers !== undefined) this._effectTriggers = { ...partial.triggers };
+  }
+
+  /**
+   * 当前效果配置（不拷贝 triggers，供内部挂钩读取）
+   */
+  effectOptions(): Required<EffectsOptions> {
+    return {
+      enabled: this._effectsEnabled,
+      triggers: this._effectTriggers,
+      cooldownMs: this._effectCooldownMs,
+    };
   }
 
   /**
@@ -1002,6 +1036,8 @@ export interface ConfigOptions {
   showTimestamp?: boolean;
   /** 历史记录大小，设为 0 则禁用 */
   historySize?: number;
+  /** 触发词动画效果配置 */
+  effects?: EffectsOptions;
 }
 
 /**
@@ -1024,6 +1060,9 @@ export const configure = (options: ConfigOptions): void => {
   }
   if (options.historySize !== undefined) {
     config.historySize = options.historySize;
+  }
+  if (options.effects !== undefined) {
+    config.applyEffects(options.effects);
   }
 };
 
@@ -1098,4 +1137,25 @@ export const getHistory = (): LogEntry[] => {
  */
 export const clearHistory = (): void => {
   config.clearHistory();
+};
+
+/**
+ * 设置触发词动画效果配置（部分合并）
+ *
+ * 未提及（undefined）的项不动；triggers 传入即整表替换（允许 {}）。
+ *
+ * @param partial 部分效果配置对象
+ */
+export const setEffects = (partial: EffectsOptions): void => {
+  config.applyEffects(partial);
+};
+
+/**
+ * 获取当前效果配置
+ *
+ * @returns 配置副本（triggers 为浅拷贝）
+ */
+export const getEffects = (): Required<EffectsOptions> => {
+  const options = config.effectOptions();
+  return { ...options, triggers: { ...options.triggers } };
 };
