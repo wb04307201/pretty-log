@@ -1,7 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_EFFECT_TRIGGERS, DEFAULT_EFFECT_COOLDOWN_MS, matchEffect, type EffectType } from '../src/effects.ts';
+import { DEFAULT_EFFECT_TRIGGERS, DEFAULT_EFFECT_COOLDOWN_MS, matchEffect, createEffectsRuntime, type EffectType, type EffectPlay, type EffectsOptions } from '../src/effects.ts';
 import { configure, setEffects, getEffects } from '../src/index.ts';
+
+const opts = (over: Partial<EffectsOptions> = {}): Required<EffectsOptions> => ({
+  enabled: true,
+  triggers: { ...DEFAULT_EFFECT_TRIGGERS },
+  cooldownMs: 2000,
+  ...over,
+});
 
 test('R16: 默认触发词表精确、均≥2字符、默认状态正确', () => {
   assert.deepEqual(DEFAULT_EFFECT_TRIGGERS, {
@@ -58,4 +65,50 @@ test('R20: 自定义词表生效，无命中返回 null', () => {
   assert.equal(matchEffect('恭喜发财', t), 'snow');
   assert.equal(matchEffect('普通日志', t), null);
   assert.equal(matchEffect('普通日志', DEFAULT_EFFECT_TRIGGERS), null);
+});
+
+test('R21: 命中才调 play 并返回类型，未命中返回 null', () => {
+  const rt = createEffectsRuntime(() => 0);
+  const calls: EffectType[] = [];
+  const play: EffectPlay = (type, onEnd) => { calls.push(type); onEnd(); };
+  assert.equal(rt.handle('烟花', opts(), play), 'fireworks');
+  assert.equal(rt.handle('普通日志', opts(), play), null);
+  assert.deepEqual(calls, ['fireworks']);
+});
+
+test('R22: 播放中再次命中被跳过（单飞）', () => {
+  const rt = createEffectsRuntime(() => 0);
+  const calls: EffectType[] = [];
+  const play: EffectPlay = (type, onEnd) => { calls.push(type); void onEnd; };  // 故意不结束
+  assert.equal(rt.handle('烟花', opts(), play), 'fireworks');
+  assert.equal(rt.handle('撒花', opts(), play), null);
+  assert.deepEqual(calls, ['fireworks']);
+});
+
+test('R23: 冷却自播放结束起算，期内跳过、期满恢复', () => {
+  let now = 0;
+  const rt = createEffectsRuntime(() => now);
+  let finish: () => void = () => {};
+  const play: EffectPlay = (_type, onEnd) => { finish = onEnd; };
+  assert.equal(rt.handle('烟花', opts(), play), 'fireworks');
+  now = 5000;
+  finish();                                       // 5000ms 时播完 → cooldownUntil = 7000
+  now = 6999;
+  assert.equal(rt.handle('烟花', opts(), play), null);      // 冷却中
+  now = 7000;
+  assert.equal(rt.handle('烟花', opts(), play), 'fireworks'); // 冷却结束
+});
+
+test('R24: enabled=false 时恒不触发', () => {
+  const rt = createEffectsRuntime(() => 0);
+  const play: EffectPlay = (_t, onEnd) => onEnd();
+  assert.equal(rt.handle('烟花', opts({ enabled: false }), play), null);
+});
+
+test('R25: 连发 100 次命中只播一次（防轰炸）', () => {
+  const rt = createEffectsRuntime(() => 0);
+  let plays = 0;
+  const play: EffectPlay = (_t, onEnd) => { plays++; onEnd(); };
+  for (let i = 0; i < 100; i++) rt.handle('烟花', opts(), play);
+  assert.equal(plays, 1);
 });

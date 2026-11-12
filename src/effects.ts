@@ -1,7 +1,7 @@
 /**
- * 触发词动画效果配置（纯类型与默认常量）
+ * 触发词动画效果配置与防轰炸运行时
  *
- * 本模块只提供类型与默认值，供 src/index.ts 的配置接线与后续动画模块使用。
+ * 本模块提供类型、默认值、触发词匹配与防轰炸运行时，供 src/index.ts 的配置接线与后续动画模块使用。
  * 顶层不得触碰 window/document，保证 Node 环境导入安全。
  */
 
@@ -52,4 +52,55 @@ export function matchEffect(text: string, triggers: Record<string, EffectType>):
     if (text.includes(key)) return effect;
   }
   return null;
+}
+
+/**
+ * 播放函数签名：接收效果类型与结束回调。
+ * 契约：必须恰好调用一次 onEnd（无法播放时立即调用）。
+ */
+export type EffectPlay = (type: EffectType, onEnd: () => void) => void;
+
+/**
+ * 防轰炸运行时：全局单飞 + 播后冷却
+ */
+export interface EffectsRuntime {
+  /**
+   * 触发处理：命中且可播时返回效果类型，否则 null。
+   * 流程：enabled=false → null；matchEffect 未命中 → null；
+   * 正在播放（单飞）或冷却中 → null；否则标记播放中、调 play、返回类型。
+   */
+  handle(text: string, opts: Required<EffectsOptions>, play: EffectPlay): EffectType | null;
+}
+
+/**
+ * 创建防轰炸运行时。每个实例有独立的单飞与冷却状态（闭包隔离）。
+ * @param clock 时间源，默认 Date.now，测试可注入假时钟
+ */
+export function createEffectsRuntime(clock: () => number = Date.now): EffectsRuntime {
+  let playing = false;        // 单飞：播放中拒绝再次触发
+  let cooldownUntil = 0;      // 冷却截止时刻（自播放结束起算）
+
+  return {
+    handle(text, opts, play): EffectType | null {
+      if (opts.enabled === false) return null;
+      const type = matchEffect(text, opts.triggers);
+      if (type === null) return null;
+      if (playing || clock() < cooldownUntil) return null;
+
+      playing = true;
+      let ended = false;
+      const onEnd = (): void => {
+        if (ended) return; // 防重入：play 违约重复调用时忽略
+        ended = true;
+        cooldownUntil = clock() + opts.cooldownMs; // 冷却自播放结束起算
+        playing = false;
+      };
+      try {
+        play(type, onEnd);
+      } catch {
+        onEnd(); // play 抛错时代为释放状态；动画是彩蛋，绝不影响日志链路
+      }
+      return type;
+    },
+  };
 }
