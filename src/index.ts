@@ -1,9 +1,11 @@
 import {
   DEFAULT_EFFECT_TRIGGERS,
   DEFAULT_EFFECT_COOLDOWN_MS,
+  createEffectsRuntime,
   type EffectType,
   type EffectsOptions,
 } from './effects.ts';
+import { playEffectInBrowser } from './effects-render.ts';
 
 export type { EffectType, EffectsOptions };
 export { DEFAULT_EFFECT_TRIGGERS };
@@ -533,6 +535,26 @@ const snapshotContent = (text: LogContent[]): LogContent[] => {
 };
 
 /**
+ * 触发词动画运行时（全局单飞 + 播后冷却），模块级单例
+ */
+const effectsRuntime = createEffectsRuntime();
+
+/**
+ * 触发词动画检查：各输出出口在级别过滤后、console 输出前调用。
+ *
+ * IS_PRODUCTION 或 enabled=false 时短路；内部再查一次 enabled，
+ * 防御未来新增出口漏查。动画是彩蛋，绝不影响日志链路
+ * （运行时吞掉 play 的抛错，播放器任何路径都不抛错）。
+ *
+ * @param text 匹配用文本（escapeFormat 之前的 stringify 结果）
+ */
+const triggerEffects = (text: string): void => {
+  if (IS_PRODUCTION) return;
+  if (config.effectOptions().enabled === false) return;
+  effectsRuntime.handle(text, config.effectOptions(), playEffectInBrowser);
+};
+
+/**
  * 格式化打印控制台日志
  * @param title 日志标题
  * @param text 日志内容数组
@@ -550,16 +572,20 @@ const prettyPrint = (
   // 检查日志级别
   if (!config.shouldLog(level)) return;
 
+  // 预计算 stringify 结果，输出循环与触发词匹配共用，避免二次 stringify
+  const parts = text.map(stringify);
+  // 触发词匹配跑在 escapeFormat 之前，用原始内容
+  if (config.effectOptions().enabled) triggerEffects([title, ...parts].join(' '));
+
   const titlePrefix = buildTitlePrefix(level, context);
   const titledTitle = escapeFormat(titlePrefix + title);
 
   // 初始化内容字符串，以包含标题
   let content = `%c ${titledTitle} `;
-  // 遍历文本数组，格式化每个元素并添加到内容字符串中
-  for (const item of text) {
+  // 遍历预计算结果，格式化每个元素并添加到内容字符串中
+  for (const formattedText of parts) {
     // 内容需转义百分号，否则用户数据里的 %c/%s 会被浏览器当作格式符解析
-    const formattedText = escapeFormat(stringify(item));
-    content = content + `\n%c ${formattedText} `;
+    content = content + `\n%c ${escapeFormat(formattedText)} `;
   }
   // 初始化日志数组，用于存储格式化后的日志内容和样式
   const logs: string[] = [];
@@ -697,8 +723,12 @@ export const rainbow = (text: LogContent): void => {
   if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
+  // 复用 stringify 结果：触发词匹配跑在转义前，用原始内容
+  const plainText = stringify(text);
+  if (config.effectOptions().enabled) triggerEffects(plainText);
+
   const titlePrefix = buildTitlePrefix('info', 'rainbow');
-  const formattedText = escapeFormat(stringify(text));
+  const formattedText = escapeFormat(plainText);
   console.log(
     `%c${titlePrefix}${formattedText}`,
     'background: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet); color: white; padding: 2px;'
@@ -728,6 +758,11 @@ export const group = (
   if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
+  // 预计算 stringify 结果，输出循环与触发词匹配共用，避免二次 stringify
+  const parts = content.map(stringify);
+  // 触发词匹配跑在 escapeFormat 之前，用原始内容
+  if (config.effectOptions().enabled) triggerEffects([title, ...parts].join(' '));
+
   const titlePrefix = buildTitlePrefix('info', 'group');
   const groupColor = color ?? config.theme.groupColor;
 
@@ -745,9 +780,8 @@ export const group = (
 
   // 分组输出，用 try/finally 确保 groupEnd 始终被调用
   try {
-    for (const item of content) {
-      const formattedText = escapeFormat(stringify(item));
-      console.log(`%c${formattedText}`, `color: ${groupColor}; padding: 2px;`);
+    for (const formattedText of parts) {
+      console.log(`%c${escapeFormat(formattedText)}`, `color: ${groupColor}; padding: 2px;`);
     }
   } finally {
     console.groupEnd();
@@ -772,6 +806,9 @@ export const table = (data: object | unknown[]): void => {
   if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
+  // 触发词匹配用 stringify 文本（表格本体原样交给 console.table）
+  if (config.effectOptions().enabled) triggerEffects(stringify(data));
+
   console.table(data);
 
   const rows = Array.isArray(data) ? data : [data];
@@ -793,6 +830,9 @@ export const table = (data: object | unknown[]): void => {
 export const picture = (url: string, scale: number = 1, altText: string = 'image'): void => {
   if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
+
+  // 调用时即匹配 altText，不等图片加载
+  if (config.effectOptions().enabled) triggerEffects(altText);
 
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -860,6 +900,9 @@ export const timeEnd = (label: string = 'default', color?: string): void => {
   const duration = performance.now() - startTime;
   timers.delete(label);
 
+  // 触发词匹配用计时器标签（缺失计时器的 console.warn 是库诊断，不参与）
+  if (config.effectOptions().enabled) triggerEffects(label);
+
   const timeColor = color ?? config.theme.timeColor;
   const titlePrefix = buildTitlePrefix('info', 'time');
 
@@ -899,6 +942,8 @@ export const timer = <T>(
     if (settled) return;
     settled = true;
     const duration = performance.now() - start;
+    // 触发词匹配用计时标签
+    if (config.effectOptions().enabled) triggerEffects(label);
     const timeColor = config.theme.timeColor;
     console.log(
       `%c ${escapeFormat(buildTitlePrefix('info', 'time') + label)}: ${duration.toFixed(2)}ms `,

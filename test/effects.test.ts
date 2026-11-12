@@ -136,3 +136,191 @@ test('R27: 无 DOM 环境 playEffectInBrowser 立即 onEnd 且不抛错', () => 
   playEffectInBrowser('fireworks', () => { ended++; });
   assert.equal(ended, 1);
 });
+
+// ---------------------------------------------------------------- R28–R33 输出挂钩与浏览器行为
+
+import * as pl from '../src/index.ts';
+
+const { info, error, rainbow, group, table, picture, time, timeEnd, timer, once, setLogLevel } = pl;
+
+/** 还原效果配置为库默认（各用例 finally 用） */
+const resetEffects = (): void => {
+  setEffects({ enabled: true, triggers: { ...DEFAULT_EFFECT_TRIGGERS }, cooldownMs: 2000 });
+};
+
+/**
+ * 安装假 DOM：window / document / Image / requestAnimationFrame / performance 全部
+ * 替换为虚拟时间实现，用完必须 teardown 还原。
+ *
+ * - 假 canvas：style.cssText 赋值被记录原文；getContext 返回万能 Proxy ctx；remove 计数
+ * - body.appendChild 计数（= created，实际挂载的 overlay 数）
+ * - requestAnimationFrame 同步递归调用回调、虚拟时间戳每次 +16.7；
+ *   单条动画链上限 3000 次防死循环（引擎有 MAX_MS 封顶必然收尾），
+ *   链条收尾（递归归零）后计数重置，互不影响
+ * - performance.now 返回同一虚拟时钟（播放器以它计算 dt，虚拟时间不走引擎永远收不了尾）
+ */
+function installFakeDom({ reducedMotion = false } = {}): {
+  created: number;
+  removed: number;
+  cssText: string;
+  teardown: () => void;
+} {
+  const state = { created: 0, removed: 0, cssText: '' };
+  const keys = ['window', 'document', 'Image', 'requestAnimationFrame', 'performance'] as const;
+  const saved = new Map<string, PropertyDescriptor | undefined>();
+  for (const key of keys) saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+
+  // 虚拟时钟：rAF 每次调用推进 16.7ms，performance.now 读同一时钟
+  let virtualNow = 0;
+  let chainCalls = 0;
+  let chainDepth = 0;
+  const raf = (cb: (t: number) => void): number => {
+    chainCalls += 1;
+    if (chainCalls > 3000) return 0; // 防死循环：超限不再续帧
+    virtualNow += 16.7;
+    chainDepth += 1;
+    try {
+      cb(virtualNow);
+    } finally {
+      chainDepth -= 1;
+      if (chainDepth === 0) chainCalls = 0; // 单条动画链播完后重置计数
+    }
+    return 0;
+  };
+
+  const ctxProxy = new Proxy({} as object, {
+    get: () => () => undefined,
+    set: () => true,
+  });
+
+  const fakeDocument = {
+    createElement: (_tag: string) => {
+      const style: Record<string, unknown> = {};
+      Object.defineProperty(style, 'cssText', {
+        get: () => state.cssText,
+        set: (v: string) => { state.cssText = v; },
+        enumerable: true,
+        configurable: true,
+      });
+      return {
+        style,
+        width: 0,
+        height: 0,
+        getContext: () => ctxProxy,
+        remove: () => { state.removed += 1; },
+      };
+    },
+    body: {
+      appendChild: () => { state.created += 1; },
+    },
+  };
+
+  class FakeImage {
+    crossOrigin = '';
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(_v: string) { /* 加载永不发生，onload / onerror 均不触发 */ }
+  }
+
+  const fakeWindow = {
+    devicePixelRatio: 2,
+    innerWidth: 800,
+    innerHeight: 600,
+    matchMedia: (_q: string) => ({ matches: reducedMotion }),
+    requestAnimationFrame: raf,
+  };
+
+  const g = globalThis as Record<string, unknown>;
+  g.window = fakeWindow;
+  g.document = fakeDocument;
+  g.Image = FakeImage;
+  g.requestAnimationFrame = raf;
+  Object.defineProperty(g, 'performance', {
+    value: { now: () => virtualNow },
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
+
+  return {
+    get created() { return state.created; },
+    get removed() { return state.removed; },
+    get cssText() { return state.cssText; },
+    teardown() {
+      for (const key of keys) {
+        const desc = saved.get(key);
+        if (desc) Object.defineProperty(globalThis, key, desc);
+        else delete g[key];
+      }
+    },
+  };
+}
+
+test('R28: 命中时创建全屏 overlay，pointer-events:none，播完移除', () => {
+  const dom = installFakeDom();
+  try {
+    setEffects({ cooldownMs: 0 });
+    info('烟花');
+    assert.equal(dom.created, 1);
+    assert.equal(dom.cssText, 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:99999');
+    assert.equal(dom.removed, 1);                    // 同步播完即移除，不留残层
+  } finally { dom.teardown(); resetEffects(); }
+});
+
+test('R29: 被 logLevel 过滤掉的日志不触发', () => {
+  const dom = installFakeDom();
+  try {
+    setEffects({ cooldownMs: 0 });
+    setLogLevel('error');
+    info('烟花');
+    assert.equal(dom.created, 0);                    // 看不见的日志不该有彩蛋
+    error('烟花');
+    assert.equal(dom.created, 1);
+  } finally { setLogLevel('debug'); dom.teardown(); resetEffects(); }
+});
+
+test('R30: 生产环境不触发', async () => {
+  const dom = installFakeDom();
+  const prev = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = 'production';
+    const mod = await import(`../src/index.ts?prod=${Date.now()}`);
+    mod.info('烟花');                                // R15 的缓存击穿手法
+    assert.equal(dom.created, 0);
+  } finally {
+    if (prev === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prev;
+    dom.teardown();
+  }
+});
+
+test('R31: prefers-reduced-motion 时不创建 canvas', () => {
+  const dom = installFakeDom({ reducedMotion: true });
+  try {
+    setEffects({ cooldownMs: 0 });
+    info('烟花');
+    assert.equal(dom.created, 0);
+  } finally { dom.teardown(); resetEffects(); }
+});
+
+test('R32: 所有输出通道的用户内容都参与触发', () => {
+  const dom = installFakeDom();
+  try {
+    setEffects({ cooldownMs: 0 });
+    let n = 0;
+    const expect = (label: string) => { n += 1; assert.equal(dom.created, n, `${label} 应触发`); };
+
+    info('烟花'); expect('info');
+    rainbow('撒花'); expect('rainbow');
+    group('庆祝', ['好耶']); expect('group');
+    table([{ 备注: '下雪' }]); expect('table');
+    picture('u.png', 1, '雪花'); expect('picture');
+    time('烟花'); timeEnd('烟花'); expect('timeEnd');
+    timer('撒花', (done) => { done(); }); expect('timer');
+    once(`r32-${Date.now()}`, '好耶'); expect('once');
+    assert.throws(() => pl.assert(false, '下雪')); expect('assert 失败信息');
+  } finally { dom.teardown(); resetEffects(); }
+});
+
+test('R33: 无 DOM 下全链路调用不抛错', () => {
+  assert.doesNotThrow(() => { pl.info('烟花'); });
+});
