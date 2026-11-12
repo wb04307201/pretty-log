@@ -42,7 +42,6 @@ interface Confetto {
   x: number;
   y: number;
   vy: number;
-  swayA: number;
   swayF: number;
   ph: number;
   rot: number;
@@ -58,7 +57,6 @@ interface Snowflake {
   y: number;
   r: number;
   vy: number;
-  swayA: number;
   swayF: number;
   ph: number;
   alpha: number;
@@ -135,7 +133,7 @@ function makeConfetti(w: number, h: number): EffectEngine {
     ps.push({
       x: Math.random() * w, y: Math.random() * h * 1.1 - h * 0.1,
       vy: 1.0 + Math.random() * 2.3,
-      swayA: 6 + Math.random() * 18, swayF: 0.012 + Math.random() * 0.022, ph: Math.random() * Math.PI * 2,
+      swayF: 0.012 + Math.random() * 0.022, ph: Math.random() * Math.PI * 2,
       rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.22,
       size: 4 + Math.random() * 7,
       color: colors[i % colors.length],
@@ -186,7 +184,7 @@ function makeSnow(w: number, h: number): EffectEngine {
       x: Math.random() * w, y: Math.random() * h * 1.1 - h * 0.1,
       r: 0.9 + Math.random() * 2.6,
       vy: 0.45 + Math.random() * 1.15,
-      swayA: 4 + Math.random() * 13, swayF: 0.008 + Math.random() * 0.016, ph: Math.random() * Math.PI * 2,
+      swayF: 0.008 + Math.random() * 0.016, ph: Math.random() * Math.PI * 2,
       alpha: 0.5 + Math.random() * 0.5
     });
   }
@@ -256,8 +254,13 @@ export function playEffectInBrowser(type: EffectType, onEnd: () => void): void {
   const end = (): void => {
     if (ended) return;
     ended = true;
-    onEnd();
+    try {
+      onEnd();
+    } catch {
+      // onEnd 自身抛错也不得外泄（契约：任何路径都不抛错）
+    }
   };
+  let canvas: HTMLCanvasElement | null = null;
   try {
     const win: Window | undefined = typeof window === 'undefined' ? undefined : window;
     const doc: Document | undefined = typeof document === 'undefined' ? undefined : document;
@@ -269,7 +272,7 @@ export function playEffectInBrowser(type: EffectType, onEnd: () => void): void {
       end();
       return;
     }
-    const canvas = doc.createElement('canvas');
+    canvas = doc.createElement('canvas');
     canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:99999';
     doc.body.appendChild(canvas);
     const dpr = Math.min(win.devicePixelRatio || 1, 2);
@@ -293,18 +296,19 @@ export function playEffectInBrowser(type: EffectType, onEnd: () => void): void {
         last = now;
         ctx.clearRect(0, 0, w, h);
         if (engine.step(ctx, dt)) {
-          canvas.remove();
+          canvas?.remove();
           end();
         } else {
           win.requestAnimationFrame(frame);
         }
       } catch {
-        canvas.remove();
+        canvas?.remove();
         end();
       }
     };
     frame();
   } catch {
+    canvas?.remove();
     end();
   }
 }
