@@ -206,7 +206,7 @@ import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pret
 
 // setEffects({ triggers }) 会整表替换 —— 展开
 // DEFAULT_EFFECT_TRIGGERS 可在保留默认词的基础上扩展
-setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '好耶': 'confetti' } });
+setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '开工': 'confetti' } });
 
 // 一键关闭
 setEffects({ enabled: false });

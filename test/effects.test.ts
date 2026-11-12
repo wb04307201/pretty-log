@@ -324,3 +324,34 @@ test('R32: 所有输出通道的用户内容都参与触发', () => {
 test('R33: 无 DOM 下全链路调用不抛错', () => {
   assert.doesNotThrow(() => { pl.info('烟花'); });
 });
+
+// ---------------------------------------------------------------- R34 非法触发值过滤
+
+test('R34: 非法触发值在配置时被过滤并告警，合法项照常触发', async () => {
+  // 独立模块实例（R30 的缓存击穿手法）：自带全新防轰炸运行时，
+  // 不受 R28–R33 在单例运行时上留下的冷却/单飞状态影响
+  const mod = await import(`../src/index.ts?r34=${Date.now()}`);
+  const dom = installFakeDom();
+  const warns: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (...args: unknown[]): void => { warns.push(args.map(String).join(' ')); };
+  try {
+    const badTriggers = { '烟花': 'fireworks', '坏词': 'boom' } as unknown as Record<string, EffectType>;
+    mod.setEffects({ cooldownMs: 0, triggers: badTriggers });
+
+    assert.deepEqual(mod.getEffects().triggers, { '烟花': 'fireworks' }); // 非法值被丢弃，整表替换语义不变
+    assert.equal(warns.length, 1);                                      // 每个被丢弃的键告警一次
+    assert.ok(
+      warns[0].includes('坏词') && warns[0].includes('boom'),
+      `告警应包含触发词键与非法值，实际：${warns[0]}`
+    );
+
+    mod.info('坏词');                          // 非法值已丢弃：不触发
+    assert.equal(dom.created, 0);
+    mod.info('烟花');                          // 合法项照常触发
+    assert.equal(dom.created, 1);
+  } finally {
+    console.warn = origWarn;
+    dom.teardown();
+  }
+});

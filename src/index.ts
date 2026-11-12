@@ -182,6 +182,28 @@ class HistoryBuffer {
 }
 
 /**
+ * 合法动画效果类型判定（防御未类型化调用方传入非法触发值）
+ */
+const isValidEffectType = (value: unknown): value is EffectType =>
+  value === 'fireworks' || value === 'confetti' || value === 'snow';
+
+/**
+ * 过滤非法触发值：每个被丢弃的键 console.warn 一次（告警含键与非法值）。
+ * 整表替换语义不变——过滤后的表一次性替换旧表（过滤后允许 {}）
+ */
+const sanitizeTriggers = (triggers: Record<string, unknown>): Record<string, EffectType> => {
+  const filtered: Record<string, EffectType> = {};
+  for (const [word, type] of Object.entries(triggers)) {
+    if (isValidEffectType(type)) {
+      filtered[word] = type;
+    } else {
+      console.warn(`[pretty-log] 触发词「${word}」的动画类型「${String(type)}」非法，已忽略（仅支持 fireworks / confetti / snow）`);
+    }
+  }
+  return filtered;
+};
+
+/**
  * 配置管理器
  */
 class ConfigManager {
@@ -277,12 +299,20 @@ class ConfigManager {
 
   /**
    * 合并部分效果配置：只处理显式提供（!== undefined）的项；
-   * triggers 传入即整表替换（允许 {}），未提及项不动
+   * triggers 传入即整表替换（允许 {}），未提及项不动。
+   * 非法动画类型的条目在配置时被过滤，并对每个被丢弃的键 console.warn 一次
    */
   applyEffects(partial: EffectsOptions): void {
     if (partial.enabled !== undefined) this._effectsEnabled = partial.enabled;
     if (partial.cooldownMs !== undefined) this._effectCooldownMs = partial.cooldownMs;
-    if (partial.triggers !== undefined) this._effectTriggers = { ...partial.triggers };
+    if (partial.triggers !== undefined) this._effectTriggers = sanitizeTriggers(partial.triggers);
+  }
+
+  /**
+   * 效果开关（零分配读取，输出热路径守卫用）
+   */
+  get effectsEnabled(): boolean {
+    return this._effectsEnabled;
   }
 
   /**
@@ -550,7 +580,7 @@ const effectsRuntime = createEffectsRuntime();
  */
 const triggerEffects = (text: string): void => {
   if (IS_PRODUCTION) return;
-  if (config.effectOptions().enabled === false) return;
+  if (config.effectsEnabled === false) return;
   effectsRuntime.handle(text, config.effectOptions(), playEffectInBrowser);
 };
 
@@ -575,7 +605,7 @@ const prettyPrint = (
   // 预计算 stringify 结果，输出循环与触发词匹配共用，避免二次 stringify
   const parts = text.map(stringify);
   // 触发词匹配跑在 escapeFormat 之前，用原始内容
-  if (config.effectOptions().enabled) triggerEffects([title, ...parts].join(' '));
+  if (config.effectsEnabled) triggerEffects([title, ...parts].join(' '));
 
   const titlePrefix = buildTitlePrefix(level, context);
   const titledTitle = escapeFormat(titlePrefix + title);
@@ -725,7 +755,7 @@ export const rainbow = (text: LogContent): void => {
 
   // 复用 stringify 结果：触发词匹配跑在转义前，用原始内容
   const plainText = stringify(text);
-  if (config.effectOptions().enabled) triggerEffects(plainText);
+  if (config.effectsEnabled) triggerEffects(plainText);
 
   const titlePrefix = buildTitlePrefix('info', 'rainbow');
   const formattedText = escapeFormat(plainText);
@@ -761,7 +791,7 @@ export const group = (
   // 预计算 stringify 结果，输出循环与触发词匹配共用，避免二次 stringify
   const parts = content.map(stringify);
   // 触发词匹配跑在 escapeFormat 之前，用原始内容
-  if (config.effectOptions().enabled) triggerEffects([title, ...parts].join(' '));
+  if (config.effectsEnabled) triggerEffects([title, ...parts].join(' '));
 
   const titlePrefix = buildTitlePrefix('info', 'group');
   const groupColor = color ?? config.theme.groupColor;
@@ -807,7 +837,7 @@ export const table = (data: object | unknown[]): void => {
   if (!config.shouldLog('info')) return;
 
   // 触发词匹配用 stringify 文本（表格本体原样交给 console.table）
-  if (config.effectOptions().enabled) triggerEffects(stringify(data));
+  if (config.effectsEnabled) triggerEffects(stringify(data));
 
   console.table(data);
 
@@ -832,7 +862,7 @@ export const picture = (url: string, scale: number = 1, altText: string = 'image
   if (!config.shouldLog('info')) return;
 
   // 调用时即匹配 altText，不等图片加载
-  if (config.effectOptions().enabled) triggerEffects(altText);
+  if (config.effectsEnabled) triggerEffects(altText);
 
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -901,7 +931,7 @@ export const timeEnd = (label: string = 'default', color?: string): void => {
   timers.delete(label);
 
   // 触发词匹配用计时器标签（缺失计时器的 console.warn 是库诊断，不参与）
-  if (config.effectOptions().enabled) triggerEffects(label);
+  if (config.effectsEnabled) triggerEffects(label);
 
   const timeColor = color ?? config.theme.timeColor;
   const titlePrefix = buildTitlePrefix('info', 'time');
@@ -943,7 +973,7 @@ export const timer = <T>(
     settled = true;
     const duration = performance.now() - start;
     // 触发词匹配用计时标签
-    if (config.effectOptions().enabled) triggerEffects(label);
+    if (config.effectsEnabled) triggerEffects(label);
     const timeColor = config.theme.timeColor;
     console.log(
       `%c ${escapeFormat(buildTitlePrefix('info', 'time') + label)}: ${duration.toFixed(2)}ms `,

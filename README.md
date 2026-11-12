@@ -209,7 +209,7 @@ import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pret
 
 // setEffects({ triggers }) replaces the whole table — spread
 // DEFAULT_EFFECT_TRIGGERS to keep the defaults and extend them
-setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '好耶': 'confetti' } });
+setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '开工': 'confetti' } });
 
 // One-shot kill switch
 setEffects({ enabled: false });
