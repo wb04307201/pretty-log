@@ -24,7 +24,7 @@
     "build": "parcel build",
     "test": "parcel test/test.html",
     "test:unit": "node --experimental-strip-types --test test/*.test.ts test/*.test.js",
-    "test:unit:offline": "node --experimental-strip-types --test test/core.test.ts test/features.test.ts test/theme.test.ts test/effects.test.ts test/ci.test.js test/workflow-contract.test.js",
+    "test:unit:offline": "node --experimental-strip-types --test test/core.test.ts test/features.test.ts test/theme.test.ts test/table.test.ts test/effects.test.ts test/ci.test.js test/workflow-contract.test.js",
     "verify:tag": "node scripts/verify-tag-version.js",
     "prepublishOnly": "node --test test/*.test.ts test/*.test.js && npx tsc --noEmit"
   },

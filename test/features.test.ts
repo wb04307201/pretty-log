@@ -158,10 +158,13 @@ test('R8: table 遵守日志级别过滤', () => {
   assert.equal(out.log.length, 0, 'logLevel=error 时 table 不应输出')
 })
 
-test('R8: table 写入历史', () => {
+test('R8: table 写入历史（title=表名、内容为未截断全量文本）', () => {
   reset()
-  capture(() => prettyLog.table([{ a: 1 }]))
-  assert.ok(prettyLog.getHistory().length > 0, 'table 应写入历史')
+  const long = 'x'.repeat(30)
+  capture(() => prettyLog.table([{ a: long }], 'R8 表'))
+  const entry = prettyLog.getHistory().slice(-1)[0]
+  assert.equal(entry.title, 'R8 表', '历史 title 应为表名')
+  assert.equal(entry.content[0], `a\n${long}`, '历史内容应为未截断全量纯文本（表头+各行）')
 })
 
 // ---------------------------------------------------------------- R9 timer

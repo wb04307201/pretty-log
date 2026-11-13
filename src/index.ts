@@ -988,29 +988,277 @@ export const group = (
   });
 };
 
+// ================== 自绘表格（renderTable） ==================
+
 /**
- * 将数组数据以表格形式输出到控制台
+ * 表格形状分类（内部）
  *
- * 与其它日志函数一致：遵守日志级别过滤，并写入历史。
- *
- * @param data 一个任意类型的数组，其元素将被显示在表格中
+ * - empty：空数组
+ * - objects：全为非 null 对象且非数组
+ * - arrays：全为数组
+ * - primitives：全为原始值（含 null/undefined 元素）
+ * - native：其余（混形状数组、单对象、Map/Set、原始值 data 本身），组外壳内回退 console.table
  */
-export const table = (data: object | unknown[]): void => {
+type TableShape = 'empty' | 'objects' | 'arrays' | 'primitives' | 'native';
+
+/** 单元格最大显示宽度，超出截断 */
+const CELL_MAX_WIDTH = 24;
+
+/** 格间 gutter（显示宽度 2） */
+const TABLE_GUTTER = '  ';
+
+/** 数值文本判定（着色与列对齐共用）：形如 42 / -3.14 / .5 / 1e10 */
+const NUMERIC_TEXT_RE = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * 单个字符的显示宽度
+ *
+ * 组合字符（含变体选择符）= 0，CJK（≥ U+2E80，代理对整体走该分支）= 2，其余 = 1。
+ * 组合判定必须先于 CJK：U+FE00–U+FE2F 虽 ≥ U+2E80 但零宽。
+ */
+const charWidth = (ch: string): number => {
+  const cp = ch.codePointAt(0) ?? 0;
+  if (
+    (cp >= 0x0300 && cp <= 0x036f) ||
+    (cp >= 0x1ab0 && cp <= 0x1aff) ||
+    (cp >= 0x1dc0 && cp <= 0x1dff) ||
+    (cp >= 0x20d0 && cp <= 0x20ff) ||
+    (cp >= 0xfe00 && cp <= 0xfe0f) ||
+    (cp >= 0xfe20 && cp <= 0xfe2f)
+  ) {
+    return 0;
+  }
+  return cp >= 0x2e80 ? 2 : 1;
+};
+
+/**
+ * 显示宽度：按码点迭代（for..of），CJK 双宽、组合字符零宽
+ */
+const displayWidth = (s: string): number => {
+  let width = 0;
+  for (const ch of s) width += charWidth(ch);
+  return width;
+};
+
+/**
+ * 按显示宽度补齐空格
+ */
+const padCell = (s: string, width: number, align: 'left' | 'right'): string => {
+  const pad = width - displayWidth(s);
+  if (pad <= 0) return s;
+  return align === 'right' ? ' '.repeat(pad) + s : s + ' '.repeat(pad);
+};
+
+/**
+ * 超宽截断：显示宽度 > max 时截到 max-1 显示列 + '…'（… 计 1 列）
+ */
+const truncateCell = (s: string, max: number): string => {
+  if (displayWidth(s) <= max) return s;
+  let width = 0;
+  let out = '';
+  for (const ch of s) {
+    const w = charWidth(ch);
+    if (width + w > max - 1) break;
+    out += ch;
+    width += w;
+  }
+  return `${out}…`;
+};
+
+/**
+ * 形状分类（详见 TableShape 注释）
+ */
+const classifyTableShape = (data: unknown): TableShape => {
+  if (!Array.isArray(data)) return 'native';
+  if (data.length === 0) return 'empty';
+  const rows = data as unknown[];
+  const isObjectRow = (v: unknown): boolean => typeof v === 'object' && v !== null && !Array.isArray(v);
+  const isPrimitive = (v: unknown): boolean => typeof v !== 'object' || v === null;
+  if (rows.every(isObjectRow)) return 'objects';
+  if (rows.every((v) => Array.isArray(v))) return 'arrays';
+  if (rows.every(isPrimitive)) return 'primitives';
+  return 'native';
+};
+
+/**
+ * 表格单元格（内部）
+ *
+ * - full：未截断 stringify 文本（history 全量用），缺键格为 ''
+ * - text：显示文本 = truncateCell(full, 24)，缺键格为 ''
+ * - role：着色角色——missing 缺键无类型色、null 为 null/undefined、numeric 数值、body 其余
+ * - empty：列对齐判定的「空值」（缺键或 raw 为 null/undefined），不参与「全为数值」判定
+ */
+interface TableCell {
+  full: string;
+  text: string;
+  role: 'missing' | 'null' | 'numeric' | 'body';
+  empty: boolean;
+}
+
+/**
+ * 构造单元格：stringify 一次，显示文本截断、数值判定用全量文本
+ */
+const makeCell = (raw: unknown): TableCell => {
+  const full = stringify(raw as LogContent);
+  const nullish = raw === null || raw === undefined;
+  return {
+    full,
+    text: truncateCell(full, CELL_MAX_WIDTH),
+    role: nullish ? 'null' : typeof raw === 'number' || NUMERIC_TEXT_RE.test(full) ? 'numeric' : 'body',
+    empty: nullish,
+  };
+};
+
+/** 缺键/缺索引单元格：空文本、无类型色 */
+const MISSING_CELL: TableCell = { full: '', text: '', role: 'missing', empty: true };
+
+/**
+ * 自绘表格渲染（内部）
+ *
+ * 组外壳 + 表头/数据行；前置守卫（IS_PRODUCTION / 级别过滤 / 触发词）已由 table() 过。
+ * 颜色在调用时从 config.theme 现取，setTheme 立即生效。
+ * history 写在渲染末尾，内容为未截断全量纯文本（表头+各行，'\n' 连接）。
+ *
+ * @param title 表名（组外壳标题与历史标题）
+ * @param data 表格数据
+ */
+const renderTable = (title: string, data: unknown): void => {
+  const theme = config.theme;
+  const shape = classifyTableShape(data);
+  const rows: unknown[] = Array.isArray(data) ? (data as unknown[]) : [];
+  const pillStyle = `background:${theme.fills.accent};color:${theme.badgeText};font-weight:600`;
+  const metaStyle = `color: ${theme.texts.meta} ;`;
+
+  // ---- 列定义与单元格矩阵 ----
+  let columns: string[] = [];
+  let cells: TableCell[][] = [];
+  if (shape === 'objects') {
+    // 各行键并集（首现顺序）；缺键格空文本、无类型色
+    const seen = new Set<string>();
+    for (const row of rows) {
+      for (const key of Object.keys(row as object)) {
+        if (!seen.has(key)) {
+          seen.add(key);
+          columns.push(key);
+        }
+      }
+    }
+    cells = rows.map((row) =>
+      columns.map((col) =>
+        Object.prototype.hasOwnProperty.call(row, col)
+          ? makeCell((row as Record<string, unknown>)[col])
+          : MISSING_CELL
+      )
+    );
+  } else if (shape === 'arrays') {
+    // 索引列 0..maxLen-1；越界格同缺键格
+    let maxLen = 0;
+    for (const row of rows) maxLen = Math.max(maxLen, (row as unknown[]).length);
+    columns = Array.from({ length: maxLen }, (_, i) => String(i));
+    cells = rows.map((row) => {
+      const arr = row as unknown[];
+      return columns.map((_, i) => (i < arr.length ? makeCell(arr[i]) : MISSING_CELL));
+    });
+  } else if (shape === 'primitives') {
+    // 单列 (value)
+    columns = ['(value)'];
+    cells = rows.map((row) => [makeCell(row)]);
+  }
+
+  // ---- 组外壳 ----
+  // 计数段：数组输入必有（native 数组列数不可判定，只报行数）；非数组输入省略
+  let meta: string | undefined;
+  if (Array.isArray(data)) {
+    meta =
+      shape === 'empty'
+        ? '0 行 × 0 列'
+        : shape === 'native'
+          ? `${rows.length} 行`
+          : `${rows.length} 行 × ${columns.length} 列`;
+  }
+  const escTitle = escapeFormat(title);
+  if (meta === undefined) {
+    console.group(`%c ${escTitle}`, pillStyle);
+  } else {
+    console.group(`%c ${escTitle} %c ${meta}`, pillStyle, metaStyle);
+  }
+
+  // ---- 内芯：pretty 自绘 / native 兜底 ----
+  const plainLines: string[] = [];
+  try {
+    if (shape === 'native') {
+      console.table(data);
+    } else if (columns.length > 0) {
+      // 列宽 = 表头/单元格显示宽度最大值
+      const widths = columns.map((col, j) =>
+        Math.max(displayWidth(col), ...cells.map((row) => displayWidth(row[j].text)))
+      );
+      // 右对齐当且仅当至少一个非空值且全部非空值为数值（含表头）
+      const aligns: ('left' | 'right')[] = columns.map((_, j) => {
+        const filled = cells.map((row) => row[j]).filter((cell) => !cell.empty);
+        return filled.length > 0 && filled.every((cell) => cell.role === 'numeric') ? 'right' : 'left';
+      });
+      const roleColor = (role: TableCell['role']): string | undefined => {
+        if (role === 'numeric') return theme.texts.warning;
+        if (role === 'null') return theme.texts.null;
+        if (role === 'body') return theme.texts.body;
+        return undefined;
+      };
+
+      // 表头：加粗，色按 mode 取黑白
+      const headerStyle = `font-weight: bold; color: ${theme.mode === 'dark' ? '#ffffff' : '#202124'} ;`;
+      const headerTexts = columns.map((col, j) => ` ${padCell(col, widths[j], aligns[j])} `);
+      console.log(
+        headerTexts.map((t) => `%c${escapeFormat(t)}`).join(TABLE_GUTTER),
+        ...headerTexts.map(() => headerStyle)
+      );
+
+      // 数据行：每行一次 console.log，每格一个 %c 段；斑马（数据行 i % 2 === 0）+ 类型色
+      cells.forEach((row, i) => {
+        const zebra =
+          i % 2 === 0 ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.055)' : 'rgba(0,0,0,0.05)') : undefined;
+        const texts = row.map((cell, j) => ` ${padCell(cell.text, widths[j], aligns[j])} `);
+        const styles = row.map((cell) => {
+          const color = roleColor(cell.role);
+          if (zebra === undefined) return color === undefined ? '' : `color: ${color} ;`;
+          return color === undefined ? `background: ${zebra}` : `background: ${zebra}; color: ${color} ;`;
+        });
+        console.log(texts.map((t) => `%c${escapeFormat(t)}`).join(TABLE_GUTTER), ...styles);
+      });
+
+      // history 全量纯文本：表头+各行（未截断、不带 padding），'\n' 连接
+      plainLines.push(columns.join(TABLE_GUTTER));
+      for (const row of cells) plainLines.push(row.map((cell) => cell.full).join(TABLE_GUTTER));
+    }
+  } finally {
+    console.groupEnd();
+  }
+
+  // ---- history：title = 表名，content = 未截断全量纯文本 ----
+  const plain = shape === 'native' ? stringify(data as LogContent) : plainLines.join('\n');
+  config.pushHistory({ level: 'info', timestamp: Date.now(), title, content: [plain] });
+};
+
+/**
+ * 将数据以自绘美化表格输出到控制台
+ *
+ * 形状分类见 classifyTableShape：objects 键并集列 / arrays 索引列 /
+ * primitives 单列 (value) / empty 空壳；不适用自绘的形状在组外壳内
+ * 回退原生 console.table（保留列排序、对象展开等交互）。
+ *
+ * 与其它日志函数一致：遵守日志级别过滤，并写入历史（未截断全量纯文本）。
+ *
+ * @param data 表格数据
+ * @param title 表名（组外壳标题与历史标题），默认 'Table'
+ */
+export const table = (data: unknown, title: string = 'Table'): void => {
   if (IS_PRODUCTION) return;
   if (!config.shouldLog('info')) return;
 
-  // 触发词匹配用 stringify 文本（表格本体原样交给 console.table）
-  if (config.effectsEnabled) triggerEffects(stringify(data));
+  // 触发词匹配用 stringify 文本（转义前）
+  if (config.effectsEnabled) triggerEffects(stringify(data as LogContent));
 
-  console.table(data);
-
-  const rows = Array.isArray(data) ? data : [data];
-  config.pushHistory({
-    level: 'info',
-    timestamp: Date.now(),
-    title: 'Table',
-    content: [`${rows.length} 行`],
-  });
+  renderTable(title, data);
 };
 
 /**
