@@ -22,7 +22,7 @@
  * 16b. withPrefix 默认表名拼接与 native 路径 history 内容（M-6 补钉）
  * 17. 生产剥离（NODE_ENV=production 时 table()/setTableMode() 零输出）
  * 18. native 敌意 getter 不抛错（逃生口不共享 pretty 单元格脆路径）
- * 19. 70000 行大表不因 spread 实参上限抛 RangeError
+ * 19. 200000 行大表不因 spread 实参上限抛 RangeError
  * 20. dw 已知值锚点：CJK/组合符/emoji/ZWJ 簇/零宽
  *
  * 运行: node --experimental-strip-types --test test/table.test.ts
@@ -503,15 +503,17 @@ test('table 18: setTableMode("native") 敌意 getter 不抛错，组外壳与 co
 
 // ---------------------------------------------------------------- 19 大表去 spread
 
-test('table 19: 70000 行大表列宽计算不因 spread 实参上限抛 RangeError', () => {
+test('table 19: 200000 行大表列宽计算不因 spread 实参上限抛 RangeError', () => {
   reset()
-  // 超过 V8 实参上限 65535：旧实现 Math.max(...cells.map(...)) 展开传参会抛 RangeError
-  const bigRows = Array.from({ length: 70000 }, (_, i) => i)
+  // 行数须超过 V8 展开实参上限（Node 24 阈值在 10 万–15 万之间；旧版浏览器为 65535）：
+  // 旧实现 Math.max(...cells.map(...)) 展开传参会抛 RangeError。
+  // CI 升 Node 后若本用例恒绿，需复查上限是否上移（可临时把列宽改回 spread 验证能红）。
+  const bigRows = Array.from({ length: 200000 }, (_, i) => i)
   let out: Record<string, unknown[][]> = {}
   assert.doesNotThrow(() => {
     out = capture(() => prettyLog.table(bigRows, '大表'))
   }, '列宽计算不应因 spread 实参上限抛 RangeError')
-  assert.ok(fmt(out.group[0]).includes('70000 行 × 1 列'), `组外壳计数段应正常，实际：${fmt(out.group[0])}`)
+  assert.ok(fmt(out.group[0]).includes('200000 行 × 1 列'), `组外壳计数段应正常，实际：${fmt(out.group[0])}`)
   assert.equal(out.groupEnd.length, 1, '组外壳应闭合')
 })
 
