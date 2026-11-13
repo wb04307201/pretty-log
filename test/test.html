@@ -27,6 +27,8 @@
     installConsolePanel()
 
     import * as prettyLog from '../src/index.ts'
+    // 暴露到全局便于目检时在控制台注入样例数据（仅测试页，不影响库本身）
+    window.prettyLog = prettyLog
 
     // 本地样图：内联为 data URI，彻底不依赖网络与打包器的静态资源管线。
     // （早前试过 './sample.png' 与 '/test/sample.png' 两种相对路径，
