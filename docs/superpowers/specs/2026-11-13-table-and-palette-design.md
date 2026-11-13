@@ -1,7 +1,7 @@
 # 表格美化与整套配色设计（table + palette）
 
 - 日期：2026-11-13
-- 状态：头脑风暴定案（视觉决策经 mockup 三屏逐轮选定），待实现计划
+- 状态：设计定案（视觉三屏逐轮选定 + 审查代理复核 + theme API 职责分离），待实现计划
 - 起因：美化 `prettyLog.table`（参考腾讯云 [so/111547335](https://cloud.tencent.com/developer/ask/sof/111547335)，即 SO q/27290486 的镜像）+ info/warn/rainbow 整套默认配色重设
 
 ## 意图
@@ -33,7 +33,7 @@ pretty-log 的立身之本是「好看的 console.log」。当前两处失分：
 
 - 不为保原生交互在默认视觉上让步。
 - 零运行时依赖。
-- 不破坏既有公开 API 形状（只增不改）。
+- 除 theme API 按 D3 职责分离重做（允许 breaking）外，其余公开 API 不破坏（只增不改）。
 
 ## 约束
 
@@ -89,14 +89,27 @@ pretty-log 的立身之本是「好看的 console.log」。当前两处失分：
 
 **两底通用**（自带底色、不随 mode 变）：全部徽章填充色（含 accent）、rainbow 渐变条。
 
-- 徽章文字一律深色压色块（≈9:1），修掉现在白字 ≈2:1 的毛病；黑底浅底同一处理。
+- 徽章文字统一 `badgeText: '#1f2330'` 深色压色块（≈9:1），修掉现在白字 ≈2:1 的毛病；不随 mode 变、不做填充亮度自动翻转（深色自定义填充需自设 `badgeText`，README 注明）。
 - rainbow：`#f9a8d4 → #c4b5fd → #93c5fd → #6ee7b7 → #fde68a`，文字 `#23273a`（顺带修掉白字压黄底）。
 
-### D3 深浅双套 + 开关
+### D3 主题 API：(c) 职责分离（用户拍板，允许 breaking）
 
-- `setTheme({ mode: 'light' | 'dark' })`，默认 `'dark'`；`configure({ theme: { mode } })` 同步支持。
-- mode 只切换**未被用户 `setTheme` 覆盖**的键；用户自定义色优先且跨 mode 保留（自定义色在浅底上可读性由用户自己负责）。
-- 切换在**调用时**生效（与现有 setTheme 语义一致：颜色按调用时读取，不模块加载时捕获）。
+结构（`configure({ theme })` 同形）：
+
+```ts
+setTheme({
+  mode: 'light',            // 只搬动未被用户覆盖的预设值
+  badgeText: '#1f2330',     // 徽章文字，全局一枚，两底通用
+  fills: { /* 徽章填充（含 accent），两底通用 */ },
+  texts: { /* 文字色 */ },
+})
+```
+
+- 键集合：`fills` = debug/info/success/warning/error/group/accent；`texts` = debug/info/success/warning/error/group/time/null/meta/body。表格数值色 = `texts.warning`、空值 = `texts.null`、字符串 = `texts.body`（不另开键）；rainbow 独立键组（渐变 stops + 文字色）。
+- 默认值 = D2 的 P1 两套；`mode`（`'dark' | 'light'`，默认 `'dark'`）只切换**未被用户覆盖**的预设值。
+- 用户覆盖语义：`fills`/`texts` 设了就是用户的，跨 mode 保留（自定义色在浅底上可读性由用户自己负责）；`texts` 覆盖为单值、两 mode 同值，分 mode 的 nested 形态（`texts: { info: { dark, light } }`）留待有需求再加（YAGNI）。
+- **旧平铺键（`infoColor`、`groupColor`、`titleColor` 等）移除**，发 breaking 版本；README 一行迁移对照（如 `infoColor` → `fills.info` + `texts.info`）。
+- 切换与覆盖在**调用时**生效（与现有语义一致：颜色按调用时读取，不模块加载时捕获）。
 
 ### D4 表格输出模式
 
@@ -115,13 +128,19 @@ pretty-log 的立身之本是「好看的 console.log」。当前两处失分：
 - 单元格内容宽 24 显示列截断，`…` 占 1 列（宽度计入 CJK=2 规则）；history 存全量 stringify 快照不受截断影响。
 - 列内边距 1 空格、列间 2 空格；行数不限（长表靠组外壳折叠语义缓解，折叠行为沿用 `group` 现状）。
 - `table(data, title?)` 新增可选第二参，默认 `'Table'`；`withPrefix` 的 logger 表名按现有前缀规则拼接。
-- mode 开关命名 `setTheme({ mode })`（若想改叫 `themeMode`，实现时改名即可）。
+
+## 审查代理复核后的裁定（builder-check，可否决）
+
+设计文档交独立审查代理通读后，以下两处细节由我裁定（与 mockup 呈现一致），不同意可改：
+
+- **数值判定**：着色按单元格——原始值为 `number`、或字符串化后形如数字（如 `'92.5'`）→ 数值色；`null`/`undefined` → null 色；其余 → 字符串色。对齐按列——非空单元格全为数值的列右对齐（含该列表头），混列整体左对齐。
+- **形状分支补全**：全原始值数组（如 `string[]`/`number[]`）→ 单列 `(value)` pretty 表；全对象数组 → 键并集列，**不带索引列**（与 mockup 一致）；全数组数组 → 索引列；其余（混形状数组、单对象、原始值、Map/Set 等）→ native 兜底，外壳照旧。
 
 ## 留给实现计划 / Builder
 
-- `Theme` / `ConfigManager` 扩展方式。建议：保留现有平铺键（`infoColor` 等）= 活动值，内部加 `DEFAULT_THEME_DARK` / `DEFAULT_THEME_LIGHT` 两值集与 override 记忆，对外 API 形状不变。
+- `Theme` / `ConfigManager` 按 D3 重做：`DEFAULT_THEME_DARK` / `DEFAULT_THEME_LIGHT` 两预设 + `fills`/`texts`/`badgeText`/`mode` 覆盖层；TS 类型形状与 `configure` 合并策略（fills/texts 各自浅合并即可）留给实现计划。
 - 表格渲染器落点：`prettyPrint` 加分支还是新 `renderTable`（都必须复用 `escapeFormat`、宽度计算、级别过滤、history）。
 - 宽度函数对 emoji（代理对）、组合字符的策略：建议代理对按 2、组合字符按 0，宁可保守。
 - `setTableMode` 与 `withPrefix` logger 的组合形态。
-- 测试矩阵（按仓库 TDD/RED-first 惯例）在 plan 里细化；核心用例：宽度计算、截断、对齐、类型着色映射、mode 切换调用时生效、native 降级与形状兜底、生产剥离。
-- README.zh-CN.md / README.md 的 theme-compare caveat 需随本设计更新（浅底不再只是「有所下降」，有正式适配）。
+- 测试矩阵（按仓库 TDD/RED-first 惯例）在 plan 里细化；核心用例：宽度计算、截断、对齐、类型着色映射、fills/texts 覆盖优先与跨 mode 保留、badgeText 独立生效、mode 切换调用时生效、native 降级与形状兜底、生产剥离。
+- README.zh-CN.md / README.md 的 theme-compare caveat 需随本设计更新（浅底不再只是「有所下降」，有正式适配），并补旧键迁移对照（`infoColor` → `fills.info` + `texts.info` 等）；发版按 breaking 升版（major，0.x 则 minor），触发流程照旧走 RELEASING.md。
