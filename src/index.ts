@@ -151,6 +151,26 @@ const P1_TEXTS_LIGHT: ThemeTexts = {
 };
 
 /**
+ * 解析初始主题模式：浏览器跟随系统 prefers-color-scheme；
+ * 无 matchMedia 的环境（如 Node 测试）或探测失败一律回退浅色。
+ *
+ * 模块加载时解析一次，作为 ConfigManager 初始 mode 与 resetTheme() 的归位目标。
+ */
+function resolveDefaultMode(): ThemeMode {
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+  } catch {
+    /* 探测失败回退浅色 */
+  }
+  return 'light';
+}
+
+/** 环境默认主题模式（模块加载时解析一次） */
+const ENV_DEFAULT_MODE: ThemeMode = resolveDefaultMode();
+
+/**
  * 日志框样式配置
  *
  * 此前样式字符串硬编码在 prettyPrint 中，用户无法调整圆角与内边距。
@@ -311,7 +331,7 @@ const sanitizeTriggers = (triggers: Record<string, unknown>): Record<string, Eff
  */
 class ConfigManager {
   private _logLevel: LogLevel = 'debug';
-  private _mode: ThemeMode = 'dark';
+  private _mode: ThemeMode = ENV_DEFAULT_MODE;
   private _fillOverrides: Partial<Record<keyof ThemeFills, string>> = {};
   private _textOverrides: Partial<Record<keyof ThemeTexts, string>> = {};
   private _rainbowColors?: string[];
@@ -465,10 +485,10 @@ class ConfigManager {
   }
 
   /**
-   * 清空主题覆盖并回到 dark（badgeText 同槽一并恢复默认）
+   * 清空主题覆盖并回到环境默认（模块加载时解析值；badgeText 同槽一并恢复默认）
    */
   resetTheme(): void {
-    this._mode = 'dark';
+    this._mode = ENV_DEFAULT_MODE;
     this._fillOverrides = {};
     this._textOverrides = {};
     this._rainbowColors = undefined;
@@ -1720,7 +1740,7 @@ export const setTheme = (partial: ThemeUpdate): void => {
 export const getTheme = (): Theme => config.theme;
 
 /**
- * 清空主题覆盖并回到 dark（badgeText 同槽一并恢复默认）
+ * 清空主题覆盖并回到环境默认（模块加载时解析的初始 mode；badgeText 同槽一并恢复默认）
  */
 export const resetTheme = (): void => {
   config.resetTheme();

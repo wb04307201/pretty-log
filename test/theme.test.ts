@@ -2,12 +2,13 @@
  * 主题模型重做（Theme / ConfigManager / 调色迁移）测试
  *
  * 覆盖（全部先于实现写就，RED 先行）：
- * - getTheme() 默认返回 P1 dark 全套值
+ * - 初始 mode 环境自适应：Node 无 matchMedia 回退 light；matchMedia 探测 dark/light/抛错三径
+ * - 显式 dark / light 预设全套值（getTheme()）
  * - fills/texts 局部覆盖，未提及键不动
  * - mode 切换只搬动未覆盖键，覆盖跨 mode 保留
  * - 覆盖项传 undefined 恢复默认
  * - badgeText 与 styles.titleColor 同槽
- * - resetTheme 清空覆盖并回到 dark
+ * - resetTheme 清空覆盖并回到环境默认（模块加载时解析值）
  * - configure({ theme }) 与 setTheme 等价合并
  * - 调用时取色（R1 回归）
  *
@@ -58,8 +59,9 @@ function reset(): void {
 
 // ---------------------------------------------------------------- 1 默认值
 
-test('getTheme() 默认返回 P1 dark 全套值', () => {
+test('getTheme() 显式 dark 返回 P1 dark 全套值', () => {
   reset()
+  prettyLog.setTheme({ mode: 'dark' })
   const t = prettyLog.getTheme()
   assert.equal(t.mode, 'dark')
   assert.equal(t.fills.info, '#93c5fd')
@@ -77,10 +79,28 @@ test('getTheme() 默认返回 P1 dark 全套值', () => {
   assert.equal(t.rainbow.text, '#23273a')
 })
 
+test('未设 mode 时默认 light（Node 无 matchMedia 回退浅色），light 预设全套值', () => {
+  reset()
+  const t = prettyLog.getTheme()
+  assert.equal(t.mode, 'light')
+  assert.equal(t.texts.debug, '#6366f1')
+  assert.equal(t.texts.info, '#2563eb')
+  assert.equal(t.texts.success, '#15803d')
+  assert.equal(t.texts.warning, '#b45309')
+  assert.equal(t.texts.error, '#dc2626')
+  assert.equal(t.texts.group, '#6d28d9')
+  assert.equal(t.texts.time, '#2563eb')
+  assert.equal(t.texts.null, '#6b7280')
+  assert.equal(t.texts.meta, '#5f6368')
+  assert.equal(t.texts.body, '#3c4043')
+})
+
 // ---------------------------------------------------------------- 2 局部覆盖
 
 test('fills/texts 局部覆盖，未提及键不动', () => {
   reset()
+  // 本用例钉 dark 预设值，显式固定 mode（默认 mode 已改环境自适应）
+  prettyLog.setTheme({ mode: 'dark' })
   prettyLog.setTheme({ fills: { info: '#00FF00' } })
   let t = prettyLog.getTheme()
   assert.equal(t.fills.info, '#00FF00')
@@ -143,10 +163,10 @@ test('badgeText 与 styles.titleColor 同槽', () => {
 
 // ---------------------------------------------------------------- 6 resetTheme
 
-test('resetTheme 清空覆盖并回到 dark', () => {
+test('resetTheme 清空覆盖并回到环境默认（Node 下 light），不固定 dark', () => {
   reset()
   prettyLog.setTheme({
-    mode: 'light',
+    mode: 'dark',
     badgeText: 'gold',
     fills: { info: '#00FF00' },
     texts: { info: 'red' },
@@ -154,9 +174,9 @@ test('resetTheme 清空覆盖并回到 dark', () => {
   })
   prettyLog.resetTheme()
   const t = prettyLog.getTheme()
-  assert.equal(t.mode, 'dark')
+  assert.equal(t.mode, 'light')
   assert.equal(t.fills.info, '#93c5fd')
-  assert.equal(t.texts.info, '#93c5fd')
+  assert.equal(t.texts.info, '#2563eb')
   assert.equal(t.badgeText, '#1f2330')
   assert.deepEqual(t.rainbow.colors, [
     '#f9a8d4',
@@ -208,4 +228,45 @@ test('rainbow.colors 传空数组视同 undefined，恢复默认五色（M-8）'
   const style = styleOf(out.log[0], 'linear-gradient')
   assert.ok(style.includes('#f9a8d4'), `样式应含默认五色首色，实际：${style}`)
   assert.ok(!style.includes('to right, )'), `不得生成非法 CSS（空渐变表），实际：${style}`)
+})
+
+// -------------------------------- 10 初始 mode 自动解析（R15 缓存穿透动态 import）
+
+test('初始 mode 自动解析：matchMedia(prefers-color-scheme: dark) matches:true → dark', async () => {
+  ;(globalThis as Record<string, unknown>).window = {
+    matchMedia: (q: string) => ({ matches: q.includes('dark') }),
+  }
+  try {
+    // 缓存穿透：初始 mode 在模块加载时解析一次，须强制重新求值模块才能测到解析路径
+    const mod = await import(`../src/index.ts?mm=dark-${Date.now()}`)
+    assert.equal(mod.getTheme().mode, 'dark')
+  } finally {
+    delete (globalThis as Record<string, unknown>).window
+  }
+})
+
+test('初始 mode 自动解析：matchMedia matches:false → light', async () => {
+  ;(globalThis as Record<string, unknown>).window = {
+    matchMedia: () => ({ matches: false }),
+  }
+  try {
+    const mod = await import(`../src/index.ts?mm=light-${Date.now()}`)
+    assert.equal(mod.getTheme().mode, 'light')
+  } finally {
+    delete (globalThis as Record<string, unknown>).window
+  }
+})
+
+test('初始 mode 自动解析：window 在场但 matchMedia 抛错 → 回退 light', async () => {
+  ;(globalThis as Record<string, unknown>).window = {
+    matchMedia: () => {
+      throw new Error('matchMedia 不可用')
+    },
+  }
+  try {
+    const mod = await import(`../src/index.ts?mm=throw-${Date.now()}`)
+    assert.equal(mod.getTheme().mode, 'light')
+  } finally {
+    delete (globalThis as Record<string, unknown>).window
+  }
 })

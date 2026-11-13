@@ -139,6 +139,8 @@ function reset(): void {
 
 test('table 1: object[] 键并集列（首现顺序）、5 行 × 4 列、缺键格空文本', () => {
   reset()
+  // 钉 dark 预设值（body 色），显式固定 mode（默认 mode 已改环境自适应）
+  prettyLog.setTheme({ mode: 'dark' })
   const rows = [
     { id: 1, name: 'Alice', role: 'dev' },
     { name: 'Bob', score: 80 },
@@ -171,6 +173,8 @@ test('table 1: object[] 键并集列（首现顺序）、5 行 × 4 列、缺键
 
 test('table 2: 类型着色——数字/null/字符串与数值文本，主题覆盖调用时生效', () => {
   reset()
+  // 钉 dark 预设值（texts.warning/null/body），显式固定 mode（默认 mode 已改环境自适应）
+  prettyLog.setTheme({ mode: 'dark' })
   const data = [{ n: 42, z: null, s: 'hi', d: '92.5' }]
   const out = capture(() => prettyLog.table(data))
   const row = out.log[1]
@@ -270,6 +274,8 @@ test('table 5: 单元格 24 显示列截断为 23 列 + …，history 存未截�
 
 test('table 6: array[] 索引列；全原始值单列 (value) 且 null 元素着 null 色', () => {
   reset()
+  // 钉 dark 预设值（texts.null），显式固定 mode（默认 mode 已改环境自适应）
+  prettyLog.setTheme({ mode: 'dark' })
   const out1 = capture(() => prettyLog.table([[10, 20], [30]]))
   assert.deepEqual(
     cellsOf(out1.log[0]).map((c) => c.trim()),
@@ -363,6 +369,8 @@ test('table 10: 循环引用对象不抛错，行文本含 [Circular]', () => {
 
 test('table 11: 斑马——第 1/3 数据行有底色、第 2 行没有；light 模式换浅底', () => {
   reset()
+  // 前半钉 dark 斑马底，显式固定 mode（默认 mode 已改环境自适应）
+  prettyLog.setTheme({ mode: 'dark' })
   const data = [{ v: 'a' }, { v: 'b' }, { v: 'c' }]
   const out = capture(() => prettyLog.table(data))
   assert.ok(styleOf(out.log[1], 'rgba(255,255,255,0.055)').length > 0, '第 1 个数据行应有 dark 斑马底')
