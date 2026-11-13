@@ -61,7 +61,7 @@
     prettyLog.debug("Debug", "详细调试数据", {debug: true})
 
     // 彩虹
-    prettyLog.rainbow("来 左边 跟我一起画个龙在你右边 画一道彩虹")
+    prettyLog.rainbow("来 左边 跟我一起画个龙 在你右边 画一道彩虹")
 
     // 组输出，默认展开
     prettyLog.group("一个组输出", ["组内容1", "组内容2", "组内容3"])
@@ -69,8 +69,14 @@
     // 组输出，折叠
     prettyLog.group("一个组输出", ["组内容1", "组内容2", "组内容3"], false, '#e66815')
 
-    // 表格
-    prettyLog.table([{a: 1, b: 1, c: 1}, {a: 2, b: 2, c: 2}, {a: 3, b: 3, c: 3}])
+    // 表格：键并集列 + 类型着色/数值右对齐 + CJK 对齐 + 缺键/null + 超长截断
+    prettyLog.table([
+        {id: 1, name: '张三', role: 'dev', score: 92.5, note: '全键行'},
+        {id: 2, name: 'Alice', role: 'design', score: 88},
+        {id: 3, name: '王小明', role: 'pm', score: null, note: 'score 为 null 显示灰色'},
+        {id: 4, name: 'Bob', score: 76.4},
+        {id: 5, name: '赵铁柱', role: 'qa', score: 91, note: '这一格内容超级长长长长长长长长长长长长长长长'},
+    ], '员工数据')
 
     // 计时器
     prettyLog.time('计时器');
