@@ -66,16 +66,8 @@ function reset(): void {
     showEmoji: false,
     showTimestamp: false,
     historySize: 200,
-    theme: {
-      infoColor: '#A6A6A6',
-      errorColor: '#EC7270',
-      warningColor: '#F1AC6A',
-      successColor: '#95DA69',
-      debugColor: '#5BC0EB',
-      groupColor: '#7B79E8',
-      timeColor: '#7B79E8',
-    },
   })
+  prettyLog.resetTheme()
   prettyLog.clearHistory()
   prettyLog.clearOnce()
   prettyLog.clearCounters()
@@ -299,7 +291,7 @@ test('R12: withPrefix 返回的 logger 自动带上前缀', () => {
 
 test('R12: withPrefix 保持底层日志级别与主题', () => {
   reset()
-  prettyLog.setTheme({ infoColor: '#00FF00' })
+  prettyLog.setTheme({ fills: { info: '#00FF00' } })
   const userLog = prettyLog.withPrefix('P')
   const out = capture(() => userLog.info('标题', '内容'))
   assert.ok(

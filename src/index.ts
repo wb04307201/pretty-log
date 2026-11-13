@@ -27,29 +27,127 @@ const LOG_LEVEL_VALUE: Record<LogLevel, number> = {
 };
 
 /**
- * 主题颜色配置
+ * 主题模式：深色 / 浅色控制台底
+ *
+ * fills/rainbow/badgeText 两底通用；texts 按 mode 取对应预设。
  */
-export interface Theme {
-  infoColor: string;
-  errorColor: string;
-  warningColor: string;
-  successColor: string;
-  debugColor: string;
-  groupColor: string;
-  timeColor: string;
+export type ThemeMode = 'dark' | 'light';
+
+/**
+ * 徽章填充色（含 accent），两底通用
+ */
+export interface ThemeFills {
+  debug: string;
+  info: string;
+  success: string;
+  warning: string;
+  error: string;
+  group: string;
+  accent: string;
 }
 
 /**
- * 默认主题
+ * 文字色，按 mode 取深/浅预设
  */
-const DEFAULT_THEME: Theme = {
-  infoColor: '#A6A6A6',
-  errorColor: '#EC7270',
-  warningColor: '#F1AC6A',
-  successColor: '#95DA69',
-  debugColor: '#5BC0EB',
-  groupColor: '#7B79E8',
-  timeColor: '#7B79E8',
+export interface ThemeTexts {
+  debug: string;
+  info: string;
+  success: string;
+  warning: string;
+  error: string;
+  group: string;
+  time: string;
+  null: string;
+  meta: string;
+  body: string;
+}
+
+/**
+ * rainbow 渐变与文字
+ */
+export interface RainbowTheme {
+  colors: string[];
+  text: string;
+}
+
+/**
+ * 主题（P1 预设 + 用户覆盖的合并结果）
+ */
+export interface Theme {
+  mode: ThemeMode;
+  badgeText: string;
+  fills: ThemeFills;
+  texts: ThemeTexts;
+  rainbow: RainbowTheme;
+}
+
+/**
+ * 主题部分覆盖
+ *
+ * 未提及项不动；值传 undefined 的项恢复预设默认（删除覆盖）。
+ */
+export interface ThemeUpdate {
+  mode?: ThemeMode;
+  /** undefined = 恢复默认 */
+  badgeText?: string | undefined;
+  fills?: { [K in keyof ThemeFills]?: string | undefined };
+  texts?: { [K in keyof ThemeTexts]?: string | undefined };
+  rainbow?: { colors?: string[]; text?: string | undefined };
+}
+
+/**
+ * 日志级别对应的主题角色名（内部）
+ */
+type LevelRole = 'debug' | 'info' | 'success' | 'warning' | 'error';
+
+// ================== P1 预设（柔雾低饱） ==================
+
+/** P1 预设：徽章填充色（两底通用） */
+const P1_FILLS: ThemeFills = {
+  debug: '#a5b4fc',
+  info: '#93c5fd',
+  success: '#86efac',
+  warning: '#fde68a',
+  error: '#fca5a5',
+  group: '#c4b5fd',
+  accent: '#93c5fd',
+};
+
+/** P1 预设：徽章文字（压色块，两底通用） */
+const P1_BADGE_TEXT = '#1f2330';
+
+/** P1 预设：rainbow 渐变与文字 */
+const P1_RAINBOW: RainbowTheme = {
+  colors: ['#f9a8d4', '#c4b5fd', '#93c5fd', '#6ee7b7', '#fde68a'],
+  text: '#23273a',
+};
+
+/** P1 预设：深底文字色 */
+const P1_TEXTS_DARK: ThemeTexts = {
+  debug: '#a5b4fc',
+  info: '#93c5fd',
+  success: '#86efac',
+  warning: '#fde68a',
+  error: '#fca5a5',
+  group: '#c4b5fd',
+  time: '#93c5fd',
+  null: '#8b93a7',
+  meta: '#8b93a7',
+  body: '#e8eaed',
+};
+
+/** P1 预设：浅底文字色 */
+const P1_TEXTS_LIGHT: ThemeTexts = {
+  debug: '#6366f1',
+  info: '#2563eb',
+  success: '#15803d',
+  warning: '#b45309',
+  error: '#dc2626',
+  group: '#6d28d9',
+  time: '#2563eb',
+  null: '#6b7280',
+  meta: '#5f6368',
+  body: '#3c4043',
 };
 
 /**
@@ -63,7 +161,7 @@ export interface Styles {
   borderRadius?: string;
   /** 内边距，默认 '1px' */
   padding?: string;
-  /** 标题文字颜色，默认 '#fff' */
+  /** 徽章文字颜色（与 setTheme({ badgeText }) 读写同一存储槽），默认 '#1f2330' */
   titleColor?: string;
   /** 边框宽度，默认 '1px' */
   borderWidth?: string;
@@ -77,7 +175,7 @@ export interface Styles {
 const DEFAULT_STYLES: Required<Styles> = {
   borderRadius: '2px',
   padding: '1px',
-  titleColor: '#fff',
+  titleColor: P1_BADGE_TEXT,
   borderWidth: '1px',
   borderStyle: 'solid',
 };
@@ -208,7 +306,11 @@ const sanitizeTriggers = (triggers: Record<string, unknown>): Record<string, Eff
  */
 class ConfigManager {
   private _logLevel: LogLevel = 'debug';
-  private _theme: Theme = { ...DEFAULT_THEME };
+  private _mode: ThemeMode = 'dark';
+  private _fillOverrides: Partial<Record<keyof ThemeFills, string>> = {};
+  private _textOverrides: Partial<Record<keyof ThemeTexts, string>> = {};
+  private _rainbowColors?: string[];
+  private _rainbowText?: string;
   private _styles: Required<Styles> = { ...DEFAULT_STYLES };
   private _showEmoji: boolean = false;
   private _showTimestamp: boolean = false;
@@ -225,15 +327,19 @@ class ConfigManager {
   /**
    * 构建日志框的 CSS 样式
    *
-   * @param color 边框/背景色
+   * 标题段：fill 作背景与边框，文字用 badgeText（即 styles.titleColor）；
+   * 内容段：边框与文字都用 textColor；几何参数（padding/borderWidth 等）沿用 Styles。
+   * 颜色声明写作「color: 值 ;」——值两侧留空格，使色值在样式串中以空格定界。
+   *
+   * @param fill 徽章填充色（标题段背景与边框）
+   * @param textColor 内容段边框与文字色
    * @param isTitle true 为标题样式（带背景），false 为内容样式（仅边框）
    */
-  buildBoxStyle(color: string, isTitle: boolean): string {
+  buildBoxStyle(fill: string, textColor: string, isTitle: boolean): string {
     const s = this._styles;
-    const border = `${s.borderWidth} ${s.borderStyle} ${color}`;
     return isTitle
-      ? `background:${color};border:${border}; padding: ${s.padding}; border-radius: ${s.borderRadius}; color: ${s.titleColor};`
-      : `border:${border}; padding: ${s.padding}; border-radius: ${s.borderRadius}; color: ${color};`;
+      ? `background:${fill};border:${s.borderWidth} ${s.borderStyle} ${fill}; padding: ${s.padding}; border-radius: ${s.borderRadius}; color: ${s.titleColor} ;`
+      : `border:${s.borderWidth} ${s.borderStyle} ${textColor}; padding: ${s.padding}; border-radius: ${s.borderRadius}; color: ${textColor} ;`;
   }
 
   get styles(): Required<Styles> {
@@ -248,8 +354,23 @@ class ConfigManager {
     this._logLevel = level;
   }
 
+  /**
+   * 当前主题 = P1 预设（texts 按 mode 取）+ 用户覆盖
+   *
+   * badgeText 与 styles.titleColor 同槽，直接读样式槽。
+   */
   get theme(): Theme {
-    return { ...this._theme };
+    const presetTexts = this._mode === 'dark' ? P1_TEXTS_DARK : P1_TEXTS_LIGHT;
+    return {
+      mode: this._mode,
+      badgeText: this._styles.titleColor,
+      fills: { ...P1_FILLS, ...this._fillOverrides },
+      texts: { ...presetTexts, ...this._textOverrides },
+      rainbow: {
+        colors: this._rainbowColors ? [...this._rainbowColors] : [...P1_RAINBOW.colors],
+        text: this._rainbowText ?? P1_RAINBOW.text,
+      },
+    };
   }
 
   /**
@@ -290,11 +411,50 @@ class ConfigManager {
 
   /**
    * 合并部分主题覆盖
+   *
+   * 未提及项不动；值为 undefined 的项删除覆盖（恢复当前 mode 的预设）。
+   * 用户覆盖跨 mode 保留——mode 只切换未被覆盖的预设值。
+   * badgeText 与 styles.titleColor 同槽，传 undefined 恢复默认。
    */
-  applyTheme(partial: Partial<Theme>): void {
-    for (const key of Object.keys(partial) as (keyof Theme)[]) {
-      this._theme[key] = partial[key]!;
+  applyTheme(partial: ThemeUpdate): void {
+    if (partial.mode !== undefined) this._mode = partial.mode;
+    if ('badgeText' in partial) {
+      this._styles.titleColor = partial.badgeText ?? DEFAULT_STYLES.titleColor;
     }
+    if (partial.fills) {
+      for (const key of Object.keys(partial.fills) as (keyof ThemeFills)[]) {
+        const value = partial.fills[key];
+        if (value === undefined) delete this._fillOverrides[key];
+        else this._fillOverrides[key] = value;
+      }
+    }
+    if (partial.texts) {
+      for (const key of Object.keys(partial.texts) as (keyof ThemeTexts)[]) {
+        const value = partial.texts[key];
+        if (value === undefined) delete this._textOverrides[key];
+        else this._textOverrides[key] = value;
+      }
+    }
+    if (partial.rainbow) {
+      if ('colors' in partial.rainbow) {
+        this._rainbowColors = partial.rainbow.colors ? [...partial.rainbow.colors] : undefined;
+      }
+      if ('text' in partial.rainbow) {
+        this._rainbowText = partial.rainbow.text;
+      }
+    }
+  }
+
+  /**
+   * 清空主题覆盖并回到 dark（badgeText 同槽一并恢复默认）
+   */
+  resetTheme(): void {
+    this._mode = 'dark';
+    this._fillOverrides = {};
+    this._textOverrides = {};
+    this._rainbowColors = undefined;
+    this._rainbowText = undefined;
+    this._styles.titleColor = DEFAULT_STYLES.titleColor;
   }
 
   /**
@@ -588,14 +748,14 @@ const triggerEffects = (text: string): void => {
  * 格式化打印控制台日志
  * @param title 日志标题
  * @param text 日志内容数组
- * @param color 日志的显示颜色
+ * @param colors 显示颜色：fill 徽章填充、text 内容文字
  * @param level 日志级别，用于级别过滤和历史记录
  * @param context 场景标识，用于选择专属 emoji
  */
 const prettyPrint = (
   title: string,
   text: LogContent[],
-  color: string,
+  colors: { fill: string; text: string },
   level: LogLevel = 'info',
   context?: string
 ): void => {
@@ -621,10 +781,10 @@ const prettyPrint = (
   const logs: string[] = [];
   // 将内容和标题的样式添加到日志数组中
   logs.push(content);
-  logs.push(config.buildBoxStyle(color, true));
+  logs.push(config.buildBoxStyle(colors.fill, colors.text, true));
   // 遍历文本数组，为每个元素添加相应的样式到日志数组中
   for (const item of text) {
-    logs.push(config.buildBoxStyle(color, false));
+    logs.push(config.buildBoxStyle(colors.fill, colors.text, false));
   }
   // 输出格式化后的日志到控制台
   console.log(...logs);
@@ -642,49 +802,51 @@ const prettyPrint = (
  * 日志工厂函数，消除 info/error/warning/success/debug 的重复代码
  *
  * @param defaultTitle 默认标题（单参数调用时使用）
- * @param colorKey 主题颜色字段名。传字段名而非色值字符串，使颜色在**打印时**
- *   现查 config.theme —— 若在模块加载时把色值捕获进闭包，setTheme 将完全失效。
- *   theme 中不存在该字段时回退到 fallbackColor，保证主题被清空也不会丢色。
+ * @param role 主题角色名。传角色名而非色值字符串，使 fills[role]/texts[role]
+ *   在**打印时**现查 config.theme —— 若在模块加载时把色值捕获进闭包，
+ *   setTheme 将完全失效。
  */
 const makeLogger =
-  (defaultTitle: string, colorKey: keyof Theme, fallbackColor: string, level: LogLevel) =>
+  (defaultTitle: string, role: LevelRole, level: LogLevel) =>
   (contentOrTitle: LogContent, ...content: LogContent[]): void => {
     if (IS_PRODUCTION) return;
     const title = content.length === 0 ? defaultTitle : stringify(contentOrTitle);
     const text = content.length === 0 ? [contentOrTitle] : content;
-    prettyPrint(title, text, config.theme[colorKey] ?? fallbackColor, level);
+    const theme = config.theme;
+    prettyPrint(title, text, { fill: theme.fills[role], text: theme.texts[role] }, level);
   };
 
 /**
  * 创建一个带固定前缀的日志器
  *
- * 内部复用 makeLogger，因此前缀 logger 与原 logger 在级别、主题、emoji、
- * 级别过滤上完全一致，仅标题多一段前缀。
+ * 内部复用 makeLogger 的取色规则，因此前缀 logger 与原 logger 在级别、主题、
+ * emoji、级别过滤上完全一致，仅标题多一段前缀。
  *
  * @param prefix 前缀文本，如 '用户模块'
  * @returns 与标准日志函数同形状的对象（debug/info/error/warning/success）
  */
 export const withPrefix = (prefix: string) => {
   const wrap =
-    (defaultTitle: string, colorKey: keyof Theme, fallbackColor: string, level: LogLevel) =>
+    (defaultTitle: string, role: LevelRole, level: LogLevel) =>
     (contentOrTitle: LogContent, ...content: LogContent[]): void => {
       if (IS_PRODUCTION) return;
       const title = content.length === 0 ? defaultTitle : stringify(contentOrTitle);
       const text = content.length === 0 ? [contentOrTitle] : content;
+      const theme = config.theme;
       prettyPrint(
         `[${prefix}] ${title}`,
         text,
-        config.theme[colorKey] ?? fallbackColor,
+        { fill: theme.fills[role], text: theme.texts[role] },
         level
       );
     };
 
   return {
-    debug: wrap('Debug', 'debugColor', '#5BC0EB', 'debug'),
-    info: wrap('Info', 'infoColor', '#A6A6A6', 'info'),
-    error: wrap('Error', 'errorColor', '#EC7270', 'error'),
-    warning: wrap('Warning', 'warningColor', '#F1AC6A', 'warn'),
-    success: wrap('Success', 'successColor', '#95DA69', 'info'),
+    debug: wrap('Debug', 'debug', 'debug'),
+    info: wrap('Info', 'info', 'info'),
+    error: wrap('Error', 'error', 'error'),
+    warning: wrap('Warning', 'warning', 'warn'),
+    success: wrap('Success', 'success', 'info'),
   };
 };
 
@@ -694,7 +856,7 @@ export const withPrefix = (prefix: string) => {
  * @param contentOrTitle 内容或标题，具体取决于后续内容参数的数量
  * @param content 可变参数，包含调试的详细信息
  */
-export const debug = makeLogger('Debug', 'debugColor', '#5BC0EB', 'debug');
+export const debug = makeLogger('Debug', 'debug', 'debug');
 
 /**
  * 输出信息框
@@ -705,7 +867,7 @@ export const debug = makeLogger('Debug', 'debugColor', '#5BC0EB', 'debug');
  * @param contentOrTitle 内容或标题，具体取决于后续内容参数的数量
  * @param content 可变参数，包含信息的详细内容
  */
-export const info = makeLogger('Info', 'infoColor', '#A6A6A6', 'info');
+export const info = makeLogger('Info', 'info', 'info');
 
 /**
  * 输出错误信息的函数
@@ -717,7 +879,7 @@ export const info = makeLogger('Info', 'infoColor', '#A6A6A6', 'info');
  * @param contentOrTitle 错误的标题或内容，根据传入的参数数量决定其作用
  * @param content 可变参数，包含错误的详细信息
  */
-export const error = makeLogger('Error', 'errorColor', '#EC7270', 'error');
+export const error = makeLogger('Error', 'error', 'error');
 
 /**
  * 显示警告信息。
@@ -728,7 +890,7 @@ export const error = makeLogger('Error', 'errorColor', '#EC7270', 'error');
  * @param contentOrTitle 第一个消息参数，如果没有其他消息参数，则作为标题。
  * @param content 可变参数，包含警告的详细信息
  */
-export const warning = makeLogger('Warning', 'warningColor', '#F1AC6A', 'warn');
+export const warning = makeLogger('Warning', 'warning', 'warn');
 
 /**
  * 显示成功信息。
@@ -739,7 +901,7 @@ export const warning = makeLogger('Warning', 'warningColor', '#F1AC6A', 'warn');
  * @param contentOrTitle 标题字符串，如果内容为空，则同时作为内容字符串
  * @param content 可变参数，包含成功的详细信息
  */
-export const success = makeLogger('Success', 'successColor', '#95DA69', 'info');
+export const success = makeLogger('Success', 'success', 'info');
 
 /**
  * 在控制台打印彩虹色文本
@@ -759,9 +921,10 @@ export const rainbow = (text: LogContent): void => {
 
   const titlePrefix = buildTitlePrefix('info', 'rainbow');
   const formattedText = escapeFormat(plainText);
+  const theme = config.theme;
   console.log(
     `%c${titlePrefix}${formattedText}`,
-    'background: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet); color: white; padding: 2px;'
+    `background: linear-gradient(to right, ${theme.rainbow.colors.join(', ')}); color: ${theme.rainbow.text} ; padding: 2px;`
   );
 
   config.pushHistory({
@@ -794,24 +957,24 @@ export const group = (
   if (config.effectsEnabled) triggerEffects([title, ...parts].join(' '));
 
   const titlePrefix = buildTitlePrefix('info', 'group');
-  const groupColor = color ?? config.theme.groupColor;
+  // 显式 color 整段覆盖（兼容旧接口）；默认 fills.group 背景 + badgeText 字
+  const theme = config.theme;
+  const titleStyle =
+    color !== undefined
+      ? `background-color: ${color}; color: #ffffff; font-weight: bold; padding: 4px;`
+      : `background-color: ${theme.fills.group}; color: ${theme.badgeText} ; font-weight: bold; padding: 4px;`;
+  const bodyStyle = color !== undefined ? `color: ${color}; padding: 2px;` : `color: ${theme.texts.group} ; padding: 2px;`;
 
   if (expand) {
-    console.group(
-      `%c${escapeFormat(titlePrefix + title)}:`,
-      `background-color: ${groupColor}; color: #ffffff; font-weight: bold; padding: 4px;`
-    );
+    console.group(`%c${escapeFormat(titlePrefix + title)}:`, titleStyle);
   } else {
-    console.groupCollapsed(
-      `%c${escapeFormat(titlePrefix + title)}:`,
-      `background-color: ${groupColor}; color: #ffffff; font-weight: bold; padding: 4px;`
-    );
+    console.groupCollapsed(`%c${escapeFormat(titlePrefix + title)}:`, titleStyle);
   }
 
   // 分组输出，用 try/finally 确保 groupEnd 始终被调用
   try {
     for (const formattedText of parts) {
-      console.log(`%c${escapeFormat(formattedText)}`, `color: ${groupColor}; padding: 2px;`);
+      console.log(`%c${escapeFormat(formattedText)}`, bodyStyle);
     }
   } finally {
     console.groupEnd();
@@ -915,8 +1078,11 @@ export const time = (label: string = 'default'): void => {
 /**
  * 结束计时并输出耗时
  *
+ * 默认输出两段：徽章段（titlePrefix + label，fills.accent 背景 + badgeText 字）
+ * + 内容段（xx.xxms，texts.time 字）。
+ *
  * @param label 计时器标签
- * @param color 输出颜色，默认为紫色
+ * @param color 显式传入时整段覆盖（兼容旧接口，沿用单段样式）
  */
 export const timeEnd = (label: string = 'default', color?: string): void => {
   if (IS_PRODUCTION) return;
@@ -933,13 +1099,22 @@ export const timeEnd = (label: string = 'default', color?: string): void => {
   // 触发词匹配用计时器标签（缺失计时器的 console.warn 是库诊断，不参与）
   if (config.effectsEnabled) triggerEffects(label);
 
-  const timeColor = color ?? config.theme.timeColor;
   const titlePrefix = buildTitlePrefix('info', 'time');
-
-  console.log(
-    `%c ${escapeFormat(titlePrefix + label)}: ${duration.toFixed(2)}ms `,
-    `background: ${timeColor}; color: white; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`
-  );
+  const elapsed = `${duration.toFixed(2)}ms`;
+  if (color !== undefined) {
+    // 兼容：显式 color 整段覆盖，沿用旧版单段样式
+    console.log(
+      `%c ${escapeFormat(titlePrefix + label)}: ${elapsed} `,
+      `background: ${color}; color: white; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`
+    );
+  } else {
+    const theme = config.theme;
+    console.log(
+      `%c ${escapeFormat(titlePrefix + label)}: %c ${elapsed} `,
+      `background: ${theme.fills.accent}; color: ${theme.badgeText} ; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`,
+      `color: ${theme.texts.time} ; padding: 2px 4px;`
+    );
+  }
 
   config.pushHistory({
     level: 'info',
@@ -974,10 +1149,12 @@ export const timer = <T>(
     const duration = performance.now() - start;
     // 触发词匹配用计时标签
     if (config.effectsEnabled) triggerEffects(label);
-    const timeColor = config.theme.timeColor;
+    // 两段输出：徽章段（label）+ 内容段（耗时），与 timeEnd 默认路径一致
+    const theme = config.theme;
     console.log(
-      `%c ${escapeFormat(buildTitlePrefix('info', 'time') + label)}: ${duration.toFixed(2)}ms `,
-      `background: ${timeColor}; color: white; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`
+      `%c ${escapeFormat(buildTitlePrefix('info', 'time') + label)}: %c ${duration.toFixed(2)}ms `,
+      `background: ${theme.fills.accent}; color: ${theme.badgeText} ; padding: 2px 4px; border-radius: ${config.styles.borderRadius};`,
+      `color: ${theme.texts.time} ; padding: 2px 4px;`
     );
     config.pushHistory({
       level: 'info',
@@ -1032,7 +1209,8 @@ export const once = (key: string, contentOrTitle: LogContent, ...content: LogCon
 
   const title = content.length === 0 ? 'Once' : stringify(contentOrTitle);
   const text = content.length === 0 ? [contentOrTitle] : content;
-  prettyPrint(title, text, config.theme.infoColor, 'info');
+  const theme = config.theme;
+  prettyPrint(title, text, { fill: theme.fills.info, text: theme.texts.info }, 'info');
 };
 
 /**
@@ -1103,8 +1281,8 @@ export const assert = (condition: unknown, message: string): void => {
 export interface ConfigOptions {
   /** 日志级别: 'debug' | 'info' | 'warn' | 'error' | 'none' */
   logLevel?: LogLevel;
-  /** 主题颜色覆盖 */
-  theme?: Partial<Theme>;
+  /** 主题覆盖（与 setTheme 同形、等价合并） */
+  theme?: ThemeUpdate;
   /** 是否显示 Emoji 前缀 */
   showEmoji?: boolean;
   /** 是否显示时间戳 */
@@ -1162,12 +1340,27 @@ export const setLogLevel = (level: LogLevel): void => {
 };
 
 /**
- * 设置主题颜色
+ * 设置主题（部分覆盖合并）
+ *
+ * 未提及项不动；值传 undefined 的项恢复预设默认。
+ * 用户覆盖跨 mode 保留，mode 只切换未被覆盖的预设值。
  *
  * @param partial 部分主题覆盖对象
  */
-export const setTheme = (partial: Partial<Theme>): void => {
+export const setTheme = (partial: ThemeUpdate): void => {
   config.applyTheme(partial);
+};
+
+/**
+ * 获取当前主题（P1 预设 + 用户覆盖的合并结果）
+ */
+export const getTheme = (): Theme => config.theme;
+
+/**
+ * 清空主题覆盖并回到 dark（badgeText 同槽一并恢复默认）
+ */
+export const resetTheme = (): void => {
+  config.resetTheme();
 };
 
 /**

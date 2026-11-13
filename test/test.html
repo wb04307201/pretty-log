@@ -111,10 +111,10 @@
 
     // --- 自定义主题 ---
     console.log('--- 自定义主题 ---')
-    prettyLog.setTheme({ infoColor: '#00FF00', errorColor: '#FF0000' })
+    prettyLog.setTheme({ fills: { info: '#00FF00', error: '#FF0000' }, texts: { info: '#00FF00', error: '#FF0000' } })
     prettyLog.info("绿色信息")
     prettyLog.error("红色错误")
-    prettyLog.setTheme({ infoColor: '#A6A6A6', errorColor: '#EC7270' })  // 恢复
+    prettyLog.resetTheme()  // 恢复
 
     // --- 一次性配置 ---
     console.log('--- 一次性配置 ---')
