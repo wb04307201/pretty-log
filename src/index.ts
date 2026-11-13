@@ -454,7 +454,9 @@ class ConfigManager {
     }
     if (partial.rainbow) {
       if ('colors' in partial.rainbow) {
-        this._rainbowColors = partial.rainbow.colors ? [...partial.rainbow.colors] : undefined;
+        // 空数组视同 undefined：恢复默认五色（覆盖层不存空数组，杜绝非法 CSS）
+        const colors = partial.rainbow.colors;
+        this._rainbowColors = colors && colors.length > 0 ? [...colors] : undefined;
       }
       if ('text' in partial.rainbow) {
         this._rainbowText = partial.rainbow.text;
@@ -1030,32 +1032,98 @@ const TABLE_GUTTER = '  ';
 const NUMERIC_TEXT_RE = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /**
- * 单个字符的显示宽度
+ * 零宽码点判定（组合符号/变体选择符/方向控制/ZWJ/不可见字符）
  *
- * 组合字符（含变体选择符）= 0，CJK（≥ U+2E80，代理对整体走该分支）= 2，其余 = 1。
- * 组合判定必须先于 CJK：U+FE00–U+FE2F 虽 ≥ U+2E80 但零宽。
+ * 短期裁剪区间集（全量 Unicode 区间表是 defer 项，到此为止）：组合附加/扩展/补充、
+ * 希伯来 niqqud（0x0591–0x05C7）、阿拉伯系（0x0610–0x061A、0x064B–0x065F、0x0670、
+ * 0x06D6–0x06ED）、ZWSP/ZWNJ/ZWJ/LRM/RLM（0x200B–0x200F）、变体选择符、组合半符号、
+ * FEFF。
+ */
+const isZeroWidthCp = (cp: number): boolean =>
+  (cp >= 0x0300 && cp <= 0x036f) || // 组合附加符号
+  (cp >= 0x0591 && cp <= 0x05c7) || // 希伯来 niqqud
+  (cp >= 0x0610 && cp <= 0x061a) || // 阿拉伯标记
+  (cp >= 0x064b && cp <= 0x065f) || // 阿拉伯变音
+  cp === 0x0670 || // 阿拉伯孤立上标 alef
+  (cp >= 0x06d6 && cp <= 0x06ed) || // 阿拉伯注记
+  (cp >= 0x1ab0 && cp <= 0x1aff) || // 组合扩展区
+  (cp >= 0x1dc0 && cp <= 0x1dff) || // 组合附加补充
+  (cp >= 0x200b && cp <= 0x200f) || // ZWSP/ZWNJ/ZWJ/LRM/RLM
+  (cp >= 0x20d0 && cp <= 0x20ff) || // 符号用组合
+  (cp >= 0xfe00 && cp <= 0xfe0f) || // 变体选择符
+  (cp >= 0xfe20 && cp <= 0xfe2f) || // 组合半符号
+  cp === 0xfeff; // ZWNBSP/BOM
+
+/**
+ * 单个字符（码点）的显示宽度
+ *
+ * 零宽 = 0，CJK（≥ U+2E80，代理对整体走该分支）= 2，其余 = 1。
+ * 零宽判定必须先于 CJK：U+FE00–U+FE2F 虽 ≥ U+2E80 但零宽。
+ * ZWJ 链簇折叠不在本层（见 scanClusters）。
  */
 const charWidth = (ch: string): number => {
   const cp = ch.codePointAt(0) ?? 0;
-  if (
-    (cp >= 0x0300 && cp <= 0x036f) ||
-    (cp >= 0x1ab0 && cp <= 0x1aff) ||
-    (cp >= 0x1dc0 && cp <= 0x1dff) ||
-    (cp >= 0x20d0 && cp <= 0x20ff) ||
-    (cp >= 0xfe00 && cp <= 0xfe0f) ||
-    (cp >= 0xfe20 && cp <= 0xfe2f)
-  ) {
-    return 0;
-  }
+  if (isZeroWidthCp(cp)) return 0;
   return cp >= 0x2e80 ? 2 : 1;
 };
 
 /**
- * 显示宽度：按码点迭代（for..of），CJK 双宽、组合字符零宽
+ * 字素簇迭代（displayWidth 与 truncateCell 共用——两者必须同簇语义）
+ *
+ * ZWJ 链簇：宽基符（宽 2 的码点）之间由 ZWJ 相连（链中可再夹组合符/变体选择符）
+ * 视为同一字素簇，整链计 2。例：家庭 emoji（三宽基符 ZWJ 链）、technologist
+ * （双宽基符 ZWJ 链）都是 2。其余簇按码点宽度累计（零宽码点计 0）。
+ * visit 返回 false 时提前停止。
+ */
+const scanClusters = (s: string, visit: (seg: string, width: number) => boolean): void => {
+  let seg = '';
+  let width = 0;
+  let bases = 0;
+  let wideChain = false;
+  let lastWide = false;
+  let sawZwj = false;
+  for (const ch of s) {
+    const w = charWidth(ch);
+    if (w === 0) {
+      seg += ch;
+      if (ch.codePointAt(0) === 0x200d) sawZwj = true;
+      continue;
+    }
+    const wide = w === 2;
+    if (bases > 0) {
+      if (wide && lastWide && sawZwj) {
+        // 宽基符间由 ZWJ（+零宽）相连：并入链
+        seg += ch;
+        bases += 1;
+        wideChain = true;
+      } else {
+        if (!visit(seg, wideChain ? 2 : width)) return;
+        seg = ch;
+        width = w;
+        bases = 1;
+        wideChain = false;
+      }
+    } else {
+      seg += ch;
+      width = w;
+      bases = 1;
+    }
+    lastWide = wide;
+    sawZwj = false;
+  }
+  if (bases > 0) visit(seg, wideChain ? 2 : width);
+  else if (seg !== '') visit(seg, 0);
+};
+
+/**
+ * 显示宽度：按字素簇迭代——CJK 双宽、零宽计 0、ZWJ 链整链计 2
  */
 const displayWidth = (s: string): number => {
   let width = 0;
-  for (const ch of s) width += charWidth(ch);
+  scanClusters(s, (_seg, w) => {
+    width += w;
+    return true;
+  });
   return width;
 };
 
@@ -1070,17 +1138,19 @@ const padCell = (s: string, width: number, align: 'left' | 'right'): string => {
 
 /**
  * 超宽截断：显示宽度 > max 时截到 max-1 显示列 + '…'（… 计 1 列）
+ *
+ * 按簇截断（与 displayWidth 同簇语义）：预算不把 ZWJ 链拆开按逐码点宽累计。
  */
 const truncateCell = (s: string, max: number): string => {
   if (displayWidth(s) <= max) return s;
   let width = 0;
   let out = '';
-  for (const ch of s) {
-    const w = charWidth(ch);
-    if (width + w > max - 1) break;
-    out += ch;
+  scanClusters(s, (seg, w) => {
+    if (width + w > max - 1) return false;
+    out += seg;
     width += w;
-  }
+    return true;
+  });
   return `${out}…`;
 };
 
@@ -1150,11 +1220,11 @@ const renderTable = (title: string, data: unknown): void => {
   const pillStyle = `background:${theme.fills.accent};color:${theme.badgeText};font-weight:600`;
   const metaStyle = `color: ${theme.texts.meta} ;`;
 
-  // ---- 列定义与单元格矩阵 ----
+  // ---- 列定义（键并集/索引列/单列）----
+  // Object.keys / .length 不触发 getter；native 降级也保留，供计数段 meta 使用
   let columns: string[] = [];
-  let cells: TableCell[][] = [];
   if (shape === 'objects') {
-    // 各行键并集（首现顺序）；缺键格空文本、无类型色
+    // 各行键并集（首现顺序）
     const seen = new Set<string>();
     for (const row of rows) {
       for (const key of Object.keys(row as object)) {
@@ -1164,26 +1234,42 @@ const renderTable = (title: string, data: unknown): void => {
         }
       }
     }
-    cells = rows.map((row) =>
-      columns.map((col) =>
-        Object.prototype.hasOwnProperty.call(row, col)
-          ? makeCell((row as Record<string, unknown>)[col])
-          : MISSING_CELL
-      )
-    );
   } else if (shape === 'arrays') {
-    // 索引列 0..maxLen-1；越界格同缺键格
+    // 索引列 0..maxLen-1
     let maxLen = 0;
     for (const row of rows) maxLen = Math.max(maxLen, (row as unknown[]).length);
     columns = Array.from({ length: maxLen }, (_, i) => String(i));
-    cells = rows.map((row) => {
-      const arr = row as unknown[];
-      return columns.map((_, i) => (i < arr.length ? makeCell(arr[i]) : MISSING_CELL));
-    });
   } else if (shape === 'primitives') {
     // 单列 (value)
     columns = ['(value)'];
-    cells = rows.map((row) => [makeCell(row)]);
+  }
+
+  // ---- 模式判定：native 降级绕开 pretty 单元格构建 ----
+  // 逃生口不共享 pretty 的 row[col] 取值脆路径（那才是抛错点），也省去 O(行×列) 白做
+  const useNative = config.tableMode === 'native' || shape === 'native';
+
+  // ---- 单元格矩阵（仅 pretty 自绘需要）----
+  // 组外壳开启之前构建（pretty 路径行为不变：遇敌意 getter 仍在开壳前抛）
+  let cells: TableCell[][] = [];
+  if (!useNative) {
+    if (shape === 'objects') {
+      // 缺键格空文本、无类型色
+      cells = rows.map((row) =>
+        columns.map((col) =>
+          Object.prototype.hasOwnProperty.call(row, col)
+            ? makeCell((row as Record<string, unknown>)[col])
+            : MISSING_CELL
+        )
+      );
+    } else if (shape === 'arrays') {
+      // 越界格同缺键格
+      cells = rows.map((row) => {
+        const arr = row as unknown[];
+        return columns.map((_, i) => (i < arr.length ? makeCell(arr[i]) : MISSING_CELL));
+      });
+    } else if (shape === 'primitives') {
+      cells = rows.map((row) => [makeCell(row)]);
+    }
   }
 
   // ---- 组外壳 ----
@@ -1205,16 +1291,17 @@ const renderTable = (title: string, data: unknown): void => {
   }
 
   // ---- 内芯：pretty 自绘 / native 兜底（tableMode === 'native' 时强制原生降级） ----
-  const useNative = config.tableMode === 'native' || shape === 'native';
   const plainLines: string[] = [];
   try {
     if (useNative) {
       console.table(data);
     } else if (columns.length > 0) {
-      // 列宽 = 表头/单元格显示宽度最大值
-      const widths = columns.map((col, j) =>
-        Math.max(displayWidth(col), ...cells.map((row) => displayWidth(row[j].text)))
-      );
+      // 列宽 = 表头/单元格显示宽度最大值（逐行循环，不用展开传参——大数据量会撞实参上限）
+      const widths = columns.map((col, j) => {
+        let w = displayWidth(col);
+        for (const row of cells) w = Math.max(w, displayWidth(row[j].text));
+        return w;
+      });
       // 右对齐当且仅当至少一个非空值且全部非空值为数值（含表头）
       const aligns: ('left' | 'right')[] = columns.map((_, j) => {
         const filled = cells.map((row) => row[j]).filter((cell) => !cell.empty);

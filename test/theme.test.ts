@@ -134,6 +134,7 @@ test('badgeText 与 styles.titleColor 同槽', () => {
   prettyLog.setTheme({ badgeText: undefined })
   assert.equal(prettyLog.getTheme().badgeText, '#1f2330')
   const out2 = capture(() => prettyLog.info('标题', '内容'))
+  // 针脚依赖 buildBoxStyle 的 `color: 值 ;` 空格格式（保留该格式是裁定，勿「清理」）
   assert.ok(
     styleOf(out2.log[0], ' #1f2330 ').includes(' #1f2330 '),
     `badgeText 传 undefined 应恢复 #1f2330，实际：${styleOf(out2.log[0], 'color')}`
@@ -189,4 +190,22 @@ test('调用时取色（R1 回归）', () => {
     style.includes('background:#00FF00'),
     `info 应在调用时取覆盖色 #00FF00，实际：${style}`
   )
+})
+
+// ---------------------------------------------------------------- 9 rainbow 空色组（M-8）
+
+test('rainbow.colors 传空数组视同 undefined，恢复默认五色（M-8）', () => {
+  reset()
+  prettyLog.setTheme({ rainbow: { colors: ['#ffffff'] } })
+  prettyLog.setTheme({ rainbow: { colors: [] } })
+  assert.deepEqual(
+    prettyLog.getTheme().rainbow.colors,
+    ['#f9a8d4', '#c4b5fd', '#93c5fd', '#6ee7b7', '#fde68a'],
+    '空数组应恢复默认五色（覆盖层不存空数组）'
+  )
+
+  const out = capture(() => prettyLog.rainbow('x'))
+  const style = styleOf(out.log[0], 'linear-gradient')
+  assert.ok(style.includes('#f9a8d4'), `样式应含默认五色首色，实际：${style}`)
+  assert.ok(!style.includes('to right, )'), `不得生成非法 CSS（空渐变表），实际：${style}`)
 })

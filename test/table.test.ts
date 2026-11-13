@@ -5,7 +5,8 @@
  * 1. object[]：键并集列（首现顺序）、5 行 × 4 列、缺键格空文本
  * 2. 类型着色（数字/null/字符串 + 数值文本；setTheme 覆盖调用时生效）
  * 3. 数值列右对齐、混列左对齐（含表头）
- * 4. CJK 双宽与组合字符零宽，各行总显示宽度相等
+ * 3b. 缺键/null 不挡右对齐（含表头），非数值对照列左对齐（M-4 补钉）
+ * 4. CJK 双宽与组合字符零宽（含 emoji/ZWJ 簇行），各行总显示宽度相等
  * 5. 24 显示列截断（23 列 + …）与 history 未截断全量文本
  * 6. array[] 索引列 / 全原始值单列 (value)（含 null 元素着 null 色）
  * 7. 空数组 → 组外壳 0 行 × 0 列、无表头
@@ -18,7 +19,11 @@
  * 14. 默认 'pretty'（object[] 不调用 console.table）
  * 15. configure({ tableMode }) 与 setTableMode 等价，setTableMode('pretty') 可切回
  * 16. withPrefix().table 标题拼接 [${prefix}] ${title}
+ * 16b. withPrefix 默认表名拼接与 native 路径 history 内容（M-6 补钉）
  * 17. 生产剥离（NODE_ENV=production 时 table()/setTableMode() 零输出）
+ * 18. native 敌意 getter 不抛错（逃生口不共享 pretty 单元格脆路径）
+ * 19. 70000 行大表不因 spread 实参上限抛 RangeError
+ * 20. dw 已知值锚点：CJK/组合符/emoji/ZWJ 簇/零宽
  *
  * 运行: node --experimental-strip-types --test test/table.test.ts
  */
@@ -58,20 +63,55 @@ function styleOf(args: unknown[], needle: string): string {
 
 /**
  * 显示宽度（测试侧独立实现，与全局约束一致：
- * CJK（≥ U+2E80，含代理对）= 2，组合字符 = 0，其余 = 1）
+ * 零宽（组合/变体/方向/ZWJ 等）= 0，CJK（≥ U+2E80，含代理对）= 2，其余 = 1；
+ * 宽基符之间由 ZWJ 相连（链中可夹组合符/变体选择符）视为同一字素簇，整链计 2）
+ *
+ * 与 src/index.ts charWidth/簇规则互为镜像——改一处必须同步（刻意不 import 被测代码）。
  */
 function dw(s: string): number {
-  let w = 0
+  let total = 0
+  let cluster = 0
+  let bases = 0
+  let chain = false
+  let lastWide = false
+  let sawZwj = false
   for (const ch of s) {
     const cp = ch.codePointAt(0) ?? 0
-    if (cp >= 0x0300 && cp <= 0x036f) continue // 组合字符零宽
-    if (cp >= 0x2e80) {
-      w += 2
-      continue
+    const zw =
+      (cp >= 0x0300 && cp <= 0x036f) ||
+      (cp >= 0x0591 && cp <= 0x05c7) ||
+      (cp >= 0x0610 && cp <= 0x061a) ||
+      (cp >= 0x064b && cp <= 0x065f) ||
+      cp === 0x0670 ||
+      (cp >= 0x06d6 && cp <= 0x06ed) ||
+      (cp >= 0x1ab0 && cp <= 0x1aff) ||
+      (cp >= 0x1dc0 && cp <= 0x1dff) ||
+      (cp >= 0x200b && cp <= 0x200f) ||
+      (cp >= 0x20d0 && cp <= 0x20ff) ||
+      (cp >= 0xfe00 && cp <= 0xfe0f) ||
+      (cp >= 0xfe20 && cp <= 0xfe2f) ||
+      cp === 0xfeff
+    if (zw) {
+      if (cp === 0x200d) sawZwj = true // ZWJ 连链
+      continue // 零宽码点计 0
     }
-    w += 1
+    const wide = cp >= 0x2e80
+    const w = wide ? 2 : 1
+    if (bases > 0 && wide && lastWide && sawZwj) {
+      cluster += w // 宽-ZWJ-宽：同簇（flush 时整链计 2）
+      bases += 1
+      chain = true
+    } else {
+      total += chain ? 2 : cluster
+      cluster = w
+      bases = 1
+      chain = false
+    }
+    lastWide = wide
+    sawZwj = false
   }
-  return w
+  total += chain ? 2 : cluster
+  return total
 }
 
 /** 把一行格式串拆为各单元格文本（去 %c 前缀与格间 2 空格 gutter；用于不含 % 的行） */
@@ -167,6 +207,30 @@ test('table 3: 数值列右对齐、混列左对齐（含表头）', () => {
   assert.ok(trail(r1[0]) > lead(r1[0]), `混列单元格应左对齐，实际：${JSON.stringify(r1[0])}`)
 })
 
+// ---------------------------------------------------------------- 3b 缺键/null 不挡右对齐（M-4 补钉）
+
+test('table 3b: 缺键/null 不挡右对齐（含表头），非数值对照列左对齐', () => {
+  reset()
+  // s 列有 null 与缺键格、但全部非空值为数值 → 右对齐；n 列含非数值非空值 → 左对齐
+  const data = [
+    { s: 9, n: 'ok' },
+    { s: null, n: 'long-note' },
+    { n: 'x' }, // s 缺键
+    { s: 1000 }, // n 缺键
+  ]
+  const out = capture(() => prettyLog.table(data))
+  const lead = (s: string): number => (s.match(/^ +/) ?? [''])[0].length
+  const trail = (s: string): number => (s.match(/ +$/) ?? [''])[0].length
+
+  const h = cellsOf(out.log[0])
+  assert.ok(lead(h[0]) > trail(h[0]), `数值列表头应右对齐（null/缺键不挡），实际：${JSON.stringify(h[0])}`)
+  assert.ok(trail(h[1]) > lead(h[1]), `非数值对照列表头应左对齐，实际：${JSON.stringify(h[1])}`)
+
+  const r1 = cellsOf(out.log[1])
+  assert.ok(lead(r1[0]) > trail(r1[0]), `数值列单元格应右对齐，实际：${JSON.stringify(r1[0])}`)
+  assert.ok(trail(r1[1]) > lead(r1[1]), `非数值对照列单元格应左对齐，实际：${JSON.stringify(r1[1])}`)
+})
+
 // ---------------------------------------------------------------- 4 CJK 等宽
 
 test('table 4: CJK 双宽与组合字符零宽，各行总显示宽度相等', () => {
@@ -176,11 +240,15 @@ test('table 4: CJK 双宽与组合字符零宽，各行总显示宽度相等', (
     { name: 'Alice', role: 'ops' },
     // e + 组合尖音符（U+0301）+ clair：显示宽度 6，组合符计 0
     { name: 'e\u0301clair', role: 'x' },
+    // 🎉（U+1F389）：单个宽基符，显示宽度 2
+    { name: '🎉', role: 'dev' },
+    // 👨‍👩‍👧（U+1F468 ZWJ U+1F469 ZWJ U+1F467）：三宽基符 ZWJ 链，整链计 2
+    { name: '👨‍👩‍👧', role: 'ops' },
   ]
   const out = capture(() => prettyLog.table(data))
   const widths = out.log.map((args) => dw(fmt(args).replace(/(?<!%)%c/g, '')))
-  // name 列宽 6、role 列宽 4 → 行显示宽 = (1+6+1) + 2 + (1+4+1) = 16
-  assert.deepEqual(widths, [16, 16, 16, 16], `表头与各行显示宽度应相等且为 16，实际：${widths}`)
+  // name 列宽 6、role 列宽 4 → 行显示宽 = (1+6+1) + 2 + (1+4+1) = 16（emoji 簇行同宽对齐）
+  assert.deepEqual(widths, [16, 16, 16, 16, 16, 16], `表头与各行显示宽度应相等且为 16，实际：${widths}`)
 })
 
 // ---------------------------------------------------------------- 5 截断
@@ -270,6 +338,8 @@ test('table 9: 单元格含 %c/%s 时转义，不破坏 %c 段与实参对应', 
       { a: 'x', b: 'y' },
     ])
   )
+  // 非空前置：堵住输出消失时循环空转恒真
+  assert.ok(out.log.length > 0, '应有自绘行输出')
   for (const args of out.log) {
     // 先剥掉转义对 %%，剩下的 %c / %s 才是真实格式符
     const bare = fmt(args).replace(/%%/g, '')
@@ -366,6 +436,24 @@ test('table 16: withPrefix("X").table(data, "T") 组标签含 [X] T', () => {
   reset()
   const out = capture(() => prettyLog.withPrefix('X').table([{ a: 1 }], 'T'))
   assert.ok(fmt(out.group[0]).includes('[X] T'), `组标签应含 [X] T，实际：${fmt(out.group[0])}`)
+
+  // 默认表名也走拼接：[X] Table（M-6 补钉）
+  const out2 = capture(() => prettyLog.withPrefix('X').table([{ a: 1 }]))
+  assert.ok(fmt(out2.group[0]).includes('[X] Table'), `默认表名应拼为 [X] Table，实际：${fmt(out2.group[0])}`)
+})
+
+test('table 16b: native 路径 history 写 stringify(data) 全文（title=表名）', () => {
+  reset()
+  prettyLog.setTableMode('native')
+  capture(() => prettyLog.table([{ alpha: 'one', beta: 2 }], '原生表'))
+  const entry = prettyLog.getHistory().slice(-1)[0]
+  assert.equal(entry.title, '原生表', '历史 title 应为表名')
+  const content = String(entry.content[0])
+  assert.ok(content.length > 0, 'content[0] 应非空')
+  assert.ok(
+    content.includes('alpha') && content.includes('one') && content.includes('beta') && content.includes('2'),
+    `content[0] 应为 stringify(data) 全文（含键与值文本），实际：${content}`
+  )
 })
 
 // ---------------------------------------------------------------- 17 生产剥离
@@ -388,4 +476,54 @@ test('table 17: 生产剥离——NODE_ENV=production 时 table()/setTableMode()
     if (prev === undefined) delete process.env.NODE_ENV
     else process.env.NODE_ENV = prev
   }
+})
+
+// ---------------------------------------------------------------- 18 native 敌意 getter
+
+test('table 18: setTableMode("native") 敌意 getter 不抛错，组外壳与 console.table 正常', () => {
+  reset()
+  prettyLog.setTableMode('native')
+  // stringify 的契约是「不抛错」而非「零求值」——JSON.stringify 遍历属性会触发
+  // getter 副作用（catch 只兜住抛错），故只钉不抛，不对是否触碰 getter 作断言。
+  const rows = [
+    {
+      id: 1,
+      get boom(): string {
+        throw new Error('GETTER')
+      },
+    },
+  ]
+  let out: Record<string, unknown[][]> = {}
+  assert.doesNotThrow(() => {
+    out = capture(() => prettyLog.table(rows, 'T'))
+  }, 'native 降级不应向调用方抛错')
+  assert.equal(out.table.length, 1, 'console.table 应被调用一次')
+  assert.equal(out.group.length, 1, '组外壳应开启')
+})
+
+// ---------------------------------------------------------------- 19 大表去 spread
+
+test('table 19: 70000 行大表列宽计算不因 spread 实参上限抛 RangeError', () => {
+  reset()
+  // 超过 V8 实参上限 65535：旧实现 Math.max(...cells.map(...)) 展开传参会抛 RangeError
+  const bigRows = Array.from({ length: 70000 }, (_, i) => i)
+  let out: Record<string, unknown[][]> = {}
+  assert.doesNotThrow(() => {
+    out = capture(() => prettyLog.table(bigRows, '大表'))
+  }, '列宽计算不应因 spread 实参上限抛 RangeError')
+  assert.ok(fmt(out.group[0]).includes('70000 行 × 1 列'), `组外壳计数段应正常，实际：${fmt(out.group[0])}`)
+  assert.equal(out.groupEnd.length, 1, '组外壳应闭合')
+})
+
+// ---------------------------------------------------------------- 20 dw 已知值锚点
+
+test('table 20: dw 已知值锚点——CJK/组合符/emoji/ZWJ 簇/零宽', () => {
+  // 防自证锚点：与 src 侧实现互查，值必须命中真值而非两边一起错
+  assert.equal(dw('张三'), 4, 'CJK 双宽 ×2 = 4')
+  assert.equal(dw('Alice'), 5, 'ASCII 逐码点 1 = 5')
+  assert.equal(dw('é'), 1, 'e + U+0301：组合吸收计 0')
+  assert.equal(dw('🎉'), 2, '🎉 单宽基符 = 2')
+  assert.equal(dw('👨‍👩‍👧'), 2, '👨‍👩‍👧 ZWJ 链整链计 2')
+  assert.equal(dw('🧑‍💻'), 2, '🧑‍💻 ZWJ 链整链计 2')
+  assert.equal(dw('a​b'), 2, 'a + ZWSP(U+200B) + b：零宽计 0')
 })

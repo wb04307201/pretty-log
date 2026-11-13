@@ -123,6 +123,7 @@ test('R6: group / timeEnd / rainbow 的专属 emoji 可被打出', () => {
     prettyLog.time('t')
     prettyLog.timeEnd('t')
   })
+  // 针脚依赖徽章 label 的 `t:` 冒号格式（保留该格式是裁定，勿「清理」）
   const timeLine = t.log.map(fmt).find((s) => s.includes('t:'))
   assert.ok(timeLine?.includes('⏱️'), `timeEnd 应带 ⏱️，实际：${timeLine}`)
 
