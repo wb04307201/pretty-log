@@ -191,6 +191,11 @@ export interface LogEntry {
 }
 
 /**
+ * 表格渲染模式：'pretty' 自绘美化表格（默认）/ 'native' 原生 console.table 降级
+ */
+export type TableMode = 'pretty' | 'native';
+
+/**
  * 默认历史容量
  */
 const DEFAULT_HISTORY_SIZE = 200;
@@ -315,6 +320,7 @@ class ConfigManager {
   private _showEmoji: boolean = false;
   private _showTimestamp: boolean = false;
   private _historySize: number = DEFAULT_HISTORY_SIZE;
+  private _tableMode: TableMode = 'pretty';
   private _effectsEnabled: boolean = true;
   private _effectTriggers: Record<string, EffectType> = { ...DEFAULT_EFFECT_TRIGGERS };
   private _effectCooldownMs: number = DEFAULT_EFFECT_COOLDOWN_MS;
@@ -407,6 +413,17 @@ class ConfigManager {
     const normalized = normalizeHistorySize(size);
     this._historySize = normalized;
     this._history.resize(normalized);
+  }
+
+  /**
+   * 表格渲染模式（调用时现读，setTableMode 立即生效）
+   */
+  get tableMode(): TableMode {
+    return this._tableMode;
+  }
+
+  set tableMode(mode: TableMode) {
+    this._tableMode = mode;
   }
 
   /**
@@ -823,7 +840,7 @@ const makeLogger =
  * emoji、级别过滤上完全一致，仅标题多一段前缀。
  *
  * @param prefix 前缀文本，如 '用户模块'
- * @returns 与标准日志函数同形状的对象（debug/info/error/warning/success）
+ * @returns 与标准日志函数同形状的对象（debug/info/error/warning/success/table）
  */
 export const withPrefix = (prefix: string) => {
   const wrap =
@@ -847,6 +864,8 @@ export const withPrefix = (prefix: string) => {
     error: wrap('Error', 'error', 'error'),
     warning: wrap('Warning', 'warning', 'warn'),
     success: wrap('Success', 'success', 'info'),
+    // 标题按现有规则拼接 [${prefix}] ${title}；守卫与渲染全量复用 table()
+    table: (data: unknown, title: string = 'Table'): void => table(data, `[${prefix}] ${title}`),
   };
 };
 
@@ -1116,6 +1135,8 @@ const MISSING_CELL: TableCell = { full: '', text: '', role: 'missing', empty: tr
  * 自绘表格渲染（内部）
  *
  * 组外壳 + 表头/数据行；前置守卫（IS_PRODUCTION / 级别过滤 / 触发词）已由 table() 过。
+ * 内芯按 tableMode 决定：'pretty' 自绘（默认）/ 'native' 强制原生 console.table，
+ * 组外壳（含数组计数段）两种模式完全一致。
  * 颜色在调用时从 config.theme 现取，setTheme 立即生效。
  * history 写在渲染末尾，内容为未截断全量纯文本（表头+各行，'\n' 连接）。
  *
@@ -1166,7 +1187,7 @@ const renderTable = (title: string, data: unknown): void => {
   }
 
   // ---- 组外壳 ----
-  // 计数段：数组输入必有（native 数组列数不可判定，只报行数）；非数组输入省略
+  // 计数段：数组输入必有（native 形状列数不可判定，只报行数）；非数组输入省略
   let meta: string | undefined;
   if (Array.isArray(data)) {
     meta =
@@ -1183,10 +1204,11 @@ const renderTable = (title: string, data: unknown): void => {
     console.group(`%c ${escTitle} %c ${meta}`, pillStyle, metaStyle);
   }
 
-  // ---- 内芯：pretty 自绘 / native 兜底 ----
+  // ---- 内芯：pretty 自绘 / native 兜底（tableMode === 'native' 时强制原生降级） ----
+  const useNative = config.tableMode === 'native' || shape === 'native';
   const plainLines: string[] = [];
   try {
-    if (shape === 'native') {
+    if (useNative) {
       console.table(data);
     } else if (columns.length > 0) {
       // 列宽 = 表头/单元格显示宽度最大值
@@ -1235,7 +1257,7 @@ const renderTable = (title: string, data: unknown): void => {
   }
 
   // ---- history：title = 表名，content = 未截断全量纯文本 ----
-  const plain = shape === 'native' ? stringify(data as LogContent) : plainLines.join('\n');
+  const plain = useNative ? stringify(data as LogContent) : plainLines.join('\n');
   config.pushHistory({ level: 'info', timestamp: Date.now(), title, content: [plain] });
 };
 
@@ -1247,6 +1269,7 @@ const renderTable = (title: string, data: unknown): void => {
  * 回退原生 console.table（保留列排序、对象展开等交互）。
  *
  * 与其它日志函数一致：遵守日志级别过滤，并写入历史（未截断全量纯文本）。
+ * setTableMode('native') 可强制回退原生 console.table（组外壳不变）。
  *
  * @param data 表格数据
  * @param title 表名（组外壳标题与历史标题），默认 'Table'
@@ -1537,6 +1560,8 @@ export interface ConfigOptions {
   showTimestamp?: boolean;
   /** 历史记录大小，设为 0 则禁用 */
   historySize?: number;
+  /** 表格渲染模式: 'pretty' | 'native'，默认 'pretty' */
+  tableMode?: TableMode;
   /** 触发词动画效果配置 */
   effects?: EffectsOptions;
 }
@@ -1561,6 +1586,9 @@ export const configure = (options: ConfigOptions): void => {
   }
   if (options.historySize !== undefined) {
     config.historySize = options.historySize;
+  }
+  if (options.tableMode !== undefined) {
+    config.tableMode = options.tableMode;
   }
   if (options.effects !== undefined) {
     config.applyEffects(options.effects);
@@ -1636,6 +1664,18 @@ export const showTimestamp = (enabled: boolean): void => {
  */
 export const setHistorySize = (size: number): void => {
   config.historySize = size;
+};
+
+/**
+ * 设置表格渲染模式
+ *
+ * 'pretty' 自绘美化表格（默认）；'native' 强制回退原生 console.table
+ * （保留列排序、对象展开等交互），组外壳与计数段不变。
+ *
+ * @param mode 表格渲染模式
+ */
+export const setTableMode = (mode: TableMode): void => {
+  config.tableMode = mode;
 };
 
 /**

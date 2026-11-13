@@ -1,5 +1,5 @@
 /**
- * 自绘表格（renderTable）回归测试 —— Task 2
+ * 自绘表格（renderTable）回归测试 —— Task 2 / Task 3
  *
  * 覆盖（全部先于实现写就，RED 先行）：
  * 1. object[]：键并集列（首现顺序）、5 行 × 4 列、缺键格空文本
@@ -14,6 +14,11 @@
  * 10. 循环引用对象不抛错，行文本含 [Circular]
  * 11. 斑马背景（第 1/3 数据行有、第 2 行没有；light 模式换浅底）
  * 12. 级别过滤零输出
+ * 13. setTableMode('native') 强制 console.table、无自绘行、组外壳计数仍在
+ * 14. 默认 'pretty'（object[] 不调用 console.table）
+ * 15. configure({ tableMode }) 与 setTableMode 等价，setTableMode('pretty') 可切回
+ * 16. withPrefix().table 标题拼接 [${prefix}] ${title}
+ * 17. 生产剥离（NODE_ENV=production 时 table()/setTableMode() 零输出）
  *
  * 运行: node --experimental-strip-types --test test/table.test.ts
  */
@@ -84,6 +89,7 @@ function reset(): void {
     showEmoji: false,
     showTimestamp: false,
     historySize: 200,
+    tableMode: 'pretty',
   })
   prettyLog.resetTheme()
   prettyLog.clearHistory()
@@ -308,4 +314,78 @@ test('table 12: setLogLevel("error") 后 table 零输出', () => {
   const total = Object.values(out).reduce((n, arr) => n + arr.length, 0)
   assert.equal(total, 0, `级别过滤后应零输出，实际 ${total} 条`)
   assert.equal(prettyLog.getHistory().length, 0, '被过滤的 table 不应写历史')
+})
+
+// ---------------------------------------------------------------- 13 setTableMode 降级
+
+test('table 13: setTableMode("native") 强制 console.table、无自绘行、组外壳计数仍在', () => {
+  reset()
+  prettyLog.setTableMode('native')
+  const data = [{ a: 1 }, { a: 2 }]
+  const out = capture(() => prettyLog.table(data, '降级'))
+  assert.equal(out.table.length, 1, 'native 模式应调用 console.table')
+  assert.equal(out.table[0][0], data, 'console.table 应收到原始数据')
+  assert.equal(out.log.length, 0, 'native 模式不应自绘数据行')
+  assert.equal(out.group.length, 1, '应有组外壳')
+  assert.equal(out.groupEnd.length, 1, '组外壳应闭合')
+  assert.ok(fmt(out.group[0]).includes('2 行 × 1 列'), `数组输入计数段应保留，实际：${fmt(out.group[0])}`)
+})
+
+// ---------------------------------------------------------------- 14 默认 pretty
+
+test('table 14: 默认 "pretty"——object[] 自绘，不调用 console.table', () => {
+  reset()
+  const out = capture(() => prettyLog.table([{ a: 1 }], '默认'))
+  assert.equal(out.table.length, 0, '默认 pretty 不应调用 console.table')
+  assert.ok(out.log.length > 0, '默认 pretty 应自绘行')
+})
+
+// ---------------------------------------------------------------- 15 configure 等价
+
+test('table 15: configure({ tableMode: "native" }) 与 setTableMode 等价，setTableMode("pretty") 可切回', () => {
+  reset()
+  prettyLog.configure({ tableMode: 'native' })
+  const out1 = capture(() => prettyLog.table([{ a: 1 }], 'A'))
+  assert.equal(out1.table.length, 1, 'configure("native") 应走 console.table')
+  assert.equal(out1.log.length, 0, 'configure("native") 不应自绘')
+
+  prettyLog.setTableMode('pretty')
+  const out2 = capture(() => prettyLog.table([{ a: 1 }], 'B'))
+  assert.equal(out2.table.length, 0, '切回 pretty 不应调用 console.table')
+  assert.ok(out2.log.length > 0, '切回 pretty 应自绘行')
+
+  prettyLog.setTableMode('native')
+  const out3 = capture(() => prettyLog.table([{ a: 1 }], 'C'))
+  assert.equal(out3.table.length, 1, 'setTableMode("native") 应走 console.table')
+  assert.equal(out3.log.length, 0, 'setTableMode("native") 不应自绘')
+})
+
+// ---------------------------------------------------------------- 16 withPrefix.table
+
+test('table 16: withPrefix("X").table(data, "T") 组标签含 [X] T', () => {
+  reset()
+  const out = capture(() => prettyLog.withPrefix('X').table([{ a: 1 }], 'T'))
+  assert.ok(fmt(out.group[0]).includes('[X] T'), `组标签应含 [X] T，实际：${fmt(out.group[0])}`)
+})
+
+// ---------------------------------------------------------------- 17 生产剥离
+
+test('table 17: 生产剥离——NODE_ENV=production 时 table()/setTableMode() 零输出', async () => {
+  reset()
+  const prev = process.env.NODE_ENV
+  process.env.NODE_ENV = 'production'
+  try {
+    // 沿用 features.test.ts R15 手法：cache-busting 查询强制重新求值模块
+    // （IS_PRODUCTION 在模块初始化时定值，命中缓存则测的仍是开发环境实例）
+    const prod = await import(`../src/index.ts?prod=${Date.now()}`)
+    const out = capture(() => {
+      prod.setTableMode('native')
+      prod.table([{ a: 1 }], '不应出现')
+    })
+    const total = Object.values(out).reduce((n, arr) => n + arr.length, 0)
+    assert.equal(total, 0, `生产环境应完全静默，实际输出 ${total} 条`)
+  } finally {
+    if (prev === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = prev
+  }
 })
