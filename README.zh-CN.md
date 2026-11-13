@@ -6,6 +6,8 @@
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
+![pretty-log 输出效果](docs/images/hero.png)
+
 ## 安装
 ```sh
 npm install @wb04307201/pretty-log
@@ -62,6 +64,8 @@ prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 ```
 
+![组输出、表格、图片与带前缀的 logger](docs/images/advanced.png)
+
 ## 高级功能
 
 ### 日志级别过滤
@@ -97,6 +101,10 @@ prettyLog.setTheme({
   groupColor: '#FF00FF',
 });
 ```
+
+![深色 / 浅色控制台下的观感对照](docs/images/theme-compare.png)
+
+> 样式按深色控制台设计；浅色背景下文字对比度会有所下降（右图）。
 
 ### 一次性配置
 ```javascript
@@ -190,6 +198,8 @@ prettyLog.info('这条不会出现');
 ### 触发词动画（彩蛋）
 日志文本命中触发词时，页面上会播放一个全屏粒子动画。按词表顺序做大小写敏感的子串匹配，首个命中生效；一次日志调用最多播一个动画，连续触发只播一次（播完约 2 秒冷却）。
 
+![撒花与打雷的触发效果](docs/images/effects.gif)
+
 默认词表：
 
 | 触发词 | 动画 |
@@ -229,6 +239,3 @@ configure({ effects: { enabled: true, cooldownMs: 2000 } });
 
 说明：`NODE_ENV=production` 时不播动画。
 说明：用户开启 `prefers-reduced-motion: reduce` 时不播动画。
-
-## 输出
-![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)

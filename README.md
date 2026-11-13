@@ -6,6 +6,8 @@
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
+![pretty-log output](docs/images/hero.png)
+
 ## Contributing
 
 This project uses automated releases driven by git tags. See [RELEASING.md](RELEASING.md) for the tag workflow and the required repository secret.
@@ -66,6 +68,8 @@ prettyLog.info({a: 100, b: {b1: 'one', b2: 'two'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: 'one', b2: 'two'}, c: [5, 6, 7]})
 ```
 
+![Group output, tables, pictures and prefixed loggers](docs/images/advanced.png)
+
 ## Advanced Features
 
 ### Log Level Filtering
@@ -101,6 +105,10 @@ prettyLog.setTheme({
   groupColor: '#FF00FF',
 });
 ```
+
+![Side-by-side appearance on dark and light consoles](docs/images/theme-compare.png)
+
+> Styles are designed for dark consoles; text contrast drops somewhat on light backgrounds (right side).
 
 ### One-Shot Configuration
 ```javascript
@@ -193,6 +201,8 @@ Note: `timer` still runs the function you give it in production — only the log
 ### Trigger-Word Animations (Easter Egg)
 When the stringified log text contains a trigger word, a full-screen particle animation plays in the page. Matching is a case-sensitive substring check in table order — the first hit wins, one animation per log call, and consecutive hits only play once (about a 2-second cooldown after each play).
 
+![Confetti and lightning triggered by log text](docs/images/effects.gif)
+
 Default trigger table:
 
 | Trigger word | Animation |
@@ -232,6 +242,3 @@ configure({ effects: { enabled: true, cooldownMs: 2000 } });
 
 Note: no animation plays when `NODE_ENV=production`.
 Note: no animation plays when the user prefers reduced motion (`prefers-reduced-motion: reduce`).
-
-## Output
-![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)
