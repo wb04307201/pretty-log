@@ -74,6 +74,10 @@ git tag v1.0.1
 git push origin v1.0.1
 ```
 
+> ⚠️ **本批改动（主题 API 迁移 + 表格美化）是 breaking change**：
+> 第 3 步升版请用 `npm version major`（0.x 阶段则 `npm version minor`）。
+> 除升版幅度外，触发流程照旧。
+
 然后在 GitHub 上操作：
 
 1. 进入仓库的 **Releases** 页面

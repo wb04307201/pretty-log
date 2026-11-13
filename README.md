@@ -98,17 +98,91 @@ prettyLog.info("With timestamp");  // [14:32:05.123] Info ...
 ```
 
 ### Custom Theme
+The theme is split by responsibility: `fills` holds badge background colors, `texts` holds text colors, `badgeText` is the badge text color, `rainbow` is the rainbow gradient, and `mode` picks the dark or light console background.
 ```javascript
+// Partial update: keys you leave out stay untouched
 prettyLog.setTheme({
-  infoColor: '#00FF00',
-  errorColor: '#FF0000',
-  groupColor: '#FF00FF',
+  mode: 'light',                 // 'dark' (default) | 'light'
+  badgeText: '#1f2330',          // badge text color
+  fills: { info: '#00FF00' },    // badge fills (shared across both backgrounds)
+  texts: { error: '#FF0000' },   // text colors (per-mode presets)
+  rainbow: { colors: ['#f9a8d4', '#93c5fd'], text: '#23273a' },
 });
+
+prettyLog.getTheme();    // current theme (presets merged with your overrides)
+prettyLog.resetTheme();  // drop all overrides and go back to dark
 ```
+
+Rules:
+
+- Keys you omit stay as they are; passing `undefined` for a key restores its preset default, e.g. `setTheme({ fills: { info: undefined } })`.
+- Your overrides survive `mode` switches — `mode` only swaps preset values you have not overridden. Colors are read at call time, so `setTheme` takes effect immediately.
+- `badgeText` and `setStyles({ titleColor })` share the same storage slot (default `#1f2330`); `resetTheme()` resets that slot too.
+
+Default palette (P1, soft and desaturated):
+
+`fills` badge backgrounds (shared across both backgrounds):
+
+| Key | Value | Key | Value |
+|---|---|---|---|
+| `debug` | `#a5b4fc` | `error` | `#fca5a5` |
+| `info` | `#93c5fd` | `group` | `#c4b5fd` |
+| `success` | `#86efac` | `accent` | `#93c5fd` |
+| `warning` | `#fde68a` | | |
+
+`texts` text colors (per `mode`):
+
+| Key | Dark | Light |
+|---|---|---|
+| `debug` | `#a5b4fc` | `#6366f1` |
+| `info` | `#93c5fd` | `#2563eb` |
+| `success` | `#86efac` | `#15803d` |
+| `warning` | `#fde68a` | `#b45309` |
+| `error` | `#fca5a5` | `#dc2626` |
+| `group` | `#c4b5fd` | `#6d28d9` |
+| `time` | `#93c5fd` | `#2563eb` |
+| `null` | `#8b93a7` | `#6b7280` |
+| `meta` | `#8b93a7` | `#5f6368` |
+| `body` | `#e8eaed` | `#3c4043` |
+
+`badgeText` defaults to `#1f2330`; `rainbow` defaults to the gradient `#f9a8d4 → #c4b5fd → #93c5fd → #6ee7b7 → #fde68a` with text `#23273a` (both shared across backgrounds).
 
 ![Side-by-side appearance on dark and light consoles](docs/images/theme-compare.png)
 
-> Styles are designed for dark consoles; text contrast drops somewhat on light backgrounds (right side).
+> Both backgrounds are now covered: on a light console switch to `setTheme({ mode: 'light' })` for the matching presets; your overrides carry over across modes.
+
+#### Migrating from the Old Color Keys (Breaking)
+
+The flat color keys are gone (breaking change) — rewrite them as follows:
+
+| Old key (removed) | New spelling |
+|---|---|
+| `infoColor` | `fills.info` + `texts.info` |
+| `errorColor` | `fills.error` + `texts.error` |
+| `warningColor` | `fills.warning` + `texts.warning` |
+| `successColor` | `fills.success` + `texts.success` |
+| `debugColor` | `fills.debug` + `texts.debug` |
+| `groupColor` | `fills.group` + `texts.group` |
+| `timeColor` | `fills.accent` + `texts.time` |
+
+### Pretty Table
+`table(data, title?)` draws its own `%c` text table (title defaults to `'Table'`): zebra striping, type coloring (numbers in `texts.warning`, nullish values in `texts.null`, strings in `texts.body`), CJK double-width alignment, and cells truncated past 24 display columns. Everything is wrapped in a `console.group`; array input also gets a `N 行 × M 列` (rows x columns) count line.
+
+Shape dispatch: arrays of objects (union-of-keys columns), arrays of arrays (index columns) and arrays of primitives (a single `(value)` column) render pretty; anything else — a single object, `Map`, `Set`, mixed-shape arrays — falls back to native `console.table` inside the group shell (keeping column sorting, object expansion and other interactions). Like the other log functions it respects level filtering and writes to history (untruncated plain text).
+
+```javascript
+prettyLog.table([{ a: 1, b: '一' }, { a: 2, b: '二' }], '用户列表');
+```
+
+Escape hatch: when you want the native interactive table back (or the pretty renderer does not fit), switch the inner rendering to `console.table` — the group shell and count line stay:
+
+```javascript
+prettyLog.setTableMode('native');   // 'pretty' (default) | 'native'
+prettyLog.setTableMode('pretty');   // back to the pretty renderer
+// equivalent: prettyLog.configure({ tableMode: 'native' })
+```
+
+`withPrefix(prefix).table` behaves exactly like `table`, with the prefix added to the title.
 
 ### One-Shot Configuration
 ```javascript
@@ -116,7 +190,8 @@ prettyLog.configure({
   logLevel: 'info',
   showEmoji: true,
   showTimestamp: true,
-  theme: { infoColor: '#00FF00' },
+  theme: { fills: { info: '#00FF00' } },
+  tableMode: 'pretty',
 });
 ```
 
@@ -167,7 +242,7 @@ prettyLog.clearCounters();
 ```
 
 ### Prefixed Logger
-Returns loggers that carry a fixed prefix while keeping the same level, theme and filtering.
+Returns loggers (`debug` / `info` / `error` / `warning` / `success` / `table`) that carry a fixed prefix while keeping the same level, theme and filtering.
 ```javascript
 const userLog = prettyLog.withPrefix('用户模块');
 userLog.info('登录成功', { userId: 123 });

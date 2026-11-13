@@ -94,17 +94,91 @@ prettyLog.info("带时间戳");  // [14:32:05.123] Info ...
 ```
 
 ### 自定义主题
+主题按「职责分离」组织：`fills` 是徽章填充色，`texts` 是文字色，`badgeText` 是徽章文字色，`rainbow` 是彩虹渐变，`mode` 切换深/浅控制台底。
 ```javascript
+// 部分覆盖：未提及的键不动
 prettyLog.setTheme({
-  infoColor: '#00FF00',
-  errorColor: '#FF0000',
-  groupColor: '#FF00FF',
+  mode: 'light',                 // 'dark'（默认）| 'light'
+  badgeText: '#1f2330',          // 徽章文字色
+  fills: { info: '#00FF00' },    // 徽章填充色（深浅两底通用）
+  texts: { error: '#FF0000' },   // 文字色（按 mode 取对应预设）
+  rainbow: { colors: ['#f9a8d4', '#93c5fd'], text: '#23273a' },
 });
+
+prettyLog.getTheme();    // 当前主题（预设 + 用户覆盖的合并结果）
+prettyLog.resetTheme();  // 清空全部覆盖并回到 dark
 ```
+
+规则：
+
+- 未提及的键不动；值传 `undefined` 的键恢复预设默认，如 `setTheme({ fills: { info: undefined } })`。
+- 用户覆盖跨 `mode` 保留，`mode` 只切换未被覆盖的预设值；颜色在每次调用时读取，`setTheme` 立即生效。
+- `badgeText` 与 `setStyles({ titleColor })` 读写同一存储槽（默认 `#1f2330`），`resetTheme()` 会连带把这个槽恢复默认。
+
+默认配色（P1 柔雾低饱）：
+
+`fills` 徽章填充色（深浅两底通用）：
+
+| 键 | 色值 | 键 | 色值 |
+|---|---|---|---|
+| `debug` | `#a5b4fc` | `error` | `#fca5a5` |
+| `info` | `#93c5fd` | `group` | `#c4b5fd` |
+| `success` | `#86efac` | `accent` | `#93c5fd` |
+| `warning` | `#fde68a` | | |
+
+`texts` 文字色（按 `mode` 取对应预设）：
+
+| 键 | 深底（dark） | 浅底（light） |
+|---|---|---|
+| `debug` | `#a5b4fc` | `#6366f1` |
+| `info` | `#93c5fd` | `#2563eb` |
+| `success` | `#86efac` | `#15803d` |
+| `warning` | `#fde68a` | `#b45309` |
+| `error` | `#fca5a5` | `#dc2626` |
+| `group` | `#c4b5fd` | `#6d28d9` |
+| `time` | `#93c5fd` | `#2563eb` |
+| `null` | `#8b93a7` | `#6b7280` |
+| `meta` | `#8b93a7` | `#5f6368` |
+| `body` | `#e8eaed` | `#3c4043` |
+
+`badgeText` 默认 `#1f2330`；`rainbow` 默认渐变 `#f9a8d4 → #c4b5fd → #93c5fd → #6ee7b7 → #fde68a`、文字 `#23273a`（两者深浅两底通用）。
 
 ![深色 / 浅色控制台下的观感对照](docs/images/theme-compare.png)
 
-> 样式按深色控制台设计；浅色背景下文字对比度会有所下降（右图）。
+> 深/浅两套文字色均已适配：浅色控制台下切到 `setTheme({ mode: 'light' })` 即用浅底预设，用户覆盖跨模式保留。
+
+#### 从旧版色键迁移（Breaking）
+
+旧的平铺色键已移除（breaking change），按下表改写：
+
+| 旧键（已移除） | 新写法 |
+|---|---|
+| `infoColor` | `fills.info` + `texts.info` |
+| `errorColor` | `fills.error` + `texts.error` |
+| `warningColor` | `fills.warning` + `texts.warning` |
+| `successColor` | `fills.success` + `texts.success` |
+| `debugColor` | `fills.debug` + `texts.debug` |
+| `groupColor` | `fills.group` + `texts.group` |
+| `timeColor` | `fills.accent` + `texts.time` |
+
+### 美化表格
+`table(data, title?)` 自绘输出 `%c` 文本表格（标题默认 `'Table'`）：斑马纹、类型着色（数值用 `texts.warning`、空值用 `texts.null`、字符串用 `texts.body`）、CJK 双宽对齐、单元格超过 24 显示列截断。外层是 `console.group` 组外壳，数组输入还会附一行 `N 行 × M 列` 计数段。
+
+形状分支：对象数组（各行键并集作列）、数组数组（索引列）、原始值数组（单列 `(value)`）走自绘；单对象、`Map`、`Set`、混形状数组等不适用自绘的输入，在组外壳内回退原生 `console.table`（保留列排序、对象展开等交互）。与其它日志函数一致：遵守级别过滤，并写入历史（历史存未截断的全量纯文本）。
+
+```javascript
+prettyLog.table([{ a: 1, b: '一' }, { a: 2, b: '二' }], '用户列表');
+```
+
+逃生口：想要原生交互（或自绘渲染不合适）时，可把内芯整体切回 `console.table`，组外壳与计数段不变：
+
+```javascript
+prettyLog.setTableMode('native');   // 'pretty'（默认）| 'native'
+prettyLog.setTableMode('pretty');   // 切回自绘
+// 等价写法：prettyLog.configure({ tableMode: 'native' })
+```
+
+`withPrefix(prefix).table` 与 `table` 完全一致，仅标题多一段前缀。
 
 ### 一次性配置
 ```javascript
@@ -112,7 +186,8 @@ prettyLog.configure({
   logLevel: 'info',
   showEmoji: true,
   showTimestamp: true,
-  theme: { infoColor: '#00FF00' },
+  theme: { fills: { info: '#00FF00' } },
+  tableMode: 'pretty',
 });
 ```
 
@@ -163,7 +238,7 @@ prettyLog.clearCounters();
 ```
 
 ### 带前缀的 logger
-返回一组带固定前缀的日志函数，级别、主题与过滤规则与标准日志函数一致。
+返回一组带固定前缀的日志函数（`debug` / `info` / `error` / `warning` / `success` / `table`），级别、主题与过滤规则与标准日志函数一致。
 ```javascript
 const userLog = prettyLog.withPrefix('用户模块');
 userLog.info('登录成功', { userId: 123 });
