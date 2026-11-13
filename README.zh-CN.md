@@ -162,7 +162,7 @@ prettyLog.resetTheme();  // 清空全部覆盖并回到 dark
 | `timeColor` | `fills.accent` + `texts.time` |
 
 ### 美化表格
-`table(data, title?)` 自绘输出 `%c` 文本表格（标题默认 `'Table'`）：斑马纹、类型着色（数值用 `texts.warning`、空值用 `texts.null`、字符串用 `texts.body`）、CJK 双宽对齐、单元格超过 24 显示列截断。外层是 `console.group` 组外壳，数组输入还会附一行 `N 行 × M 列` 计数段。
+`table(data, title?)` 自绘输出 `%c` 文本表格（标题默认 `'Table'`）：斑马纹、类型着色（数值用 `texts.warning`，数值样式字符串如 `'92.5'` 同样计入；空值用 `texts.null`；字符串用 `texts.body`；缺键格无类型色）、CJK 双宽对齐、单元格超过 24 显示列截断。外层是 `console.group` 组外壳，数组输入还会附一行 `N 行 × M 列` 计数段——混形状数组（native 兜底）只显 `N 行`，空表显 `0 行 × 0 列`。
 
 形状分支：对象数组（各行键并集作列）、数组数组（索引列）、原始值数组（单列 `(value)`）走自绘；单对象、`Map`、`Set`、混形状数组等不适用自绘的输入，在组外壳内回退原生 `console.table`（保留列排序、对象展开等交互）。与其它日志函数一致：遵守级别过滤，并写入历史（历史存未截断的全量纯文本）。
 

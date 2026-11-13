@@ -166,7 +166,7 @@ The flat color keys are gone (breaking change) — rewrite them as follows:
 | `timeColor` | `fills.accent` + `texts.time` |
 
 ### Pretty Table
-`table(data, title?)` draws its own `%c` text table (title defaults to `'Table'`): zebra striping, type coloring (numbers in `texts.warning`, nullish values in `texts.null`, strings in `texts.body`), CJK double-width alignment, and cells truncated past 24 display columns. Everything is wrapped in a `console.group`; array input also gets a `N 行 × M 列` (rows x columns) count line.
+`table(data, title?)` draws its own `%c` text table (title defaults to `'Table'`): zebra striping, type coloring (numbers in `texts.warning`, including numeric-style strings like `'92.5'`; nullish values in `texts.null`; strings in `texts.body`; missing-key cells get no type color), CJK double-width alignment, and cells truncated past 24 display columns. Everything is wrapped in a `console.group`; array input also gets a `N 行 × M 列` (rows x columns) count line — mixed-shape arrays that fall back to native show only `N 行`, and an empty table shows `0 行 × 0 列`.
 
 Shape dispatch: arrays of objects (union-of-keys columns), arrays of arrays (index columns) and arrays of primitives (a single `(value)` column) render pretty; anything else — a single object, `Map`, `Set`, mixed-shape arrays — falls back to native `console.table` inside the group shell (keeping column sorting, object expansion and other interactions). Like the other log functions it respects level filtering and writes to history (untruncated plain text).
 
