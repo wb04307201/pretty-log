@@ -98,11 +98,11 @@ prettyLog.info("With timestamp");  // [14:32:05.123] Info ...
 ```
 
 ### Custom Theme
-The theme is split by responsibility: `fills` holds badge background colors, `texts` holds text colors, `badgeText` is the badge text color, `rainbow` is the rainbow gradient, and `mode` picks the dark or light console background.
+The theme is split by responsibility: `fills` holds badge background colors, `texts` holds text colors, `badgeText` is the badge text color, `rainbow` is the rainbow gradient, and `mode` picks the dark or light console background. By default the theme automatically follows the system (`prefers-color-scheme`) in the browser; environments without `matchMedia` (such as Node tests) default to light.
 ```javascript
 // Partial update: keys you leave out stay untouched
 prettyLog.setTheme({
-  mode: 'light',                 // 'dark' (default) | 'light'
+  mode: 'light',                 // 'dark' | 'light' — pin manually (default: auto-follows the system)
   badgeText: '#1f2330',          // badge text color
   fills: { info: '#00FF00' },    // badge fills (shared across both backgrounds)
   texts: { error: '#FF0000' },   // text colors (per-mode presets)
@@ -110,7 +110,7 @@ prettyLog.setTheme({
 });
 
 prettyLog.getTheme();    // current theme (presets merged with your overrides)
-prettyLog.resetTheme();  // drop all overrides and go back to dark
+prettyLog.resetTheme();  // drop all overrides and go back to the environment default
 ```
 
 Rules:
@@ -118,6 +118,8 @@ Rules:
 - Keys you omit stay as they are; passing `undefined` for a key restores its preset default, e.g. `setTheme({ fills: { info: undefined } })`.
 - Your overrides survive `mode` switches — `mode` only swaps preset values you have not overridden. Colors are read at call time, so `setTheme` takes effect immediately.
 - `badgeText` and `setStyles({ titleColor })` share the same storage slot (default `#1f2330`); `resetTheme()` resets that slot too.
+- The default `mode` is resolved once at load: the browser follows `prefers-color-scheme`; without `matchMedia` (e.g. Node tests) it falls back to light. `setTheme({ mode: 'dark' | 'light' })` pins a mode manually, and `resetTheme()` returns to that environment default.
+- Boundary: the page cannot read the DevTools **manually** chosen theme (a platform limitation) — if the console theme diverges from the system one, fall back to `setTheme({ mode })`.
 
 Default palette (P1, soft and desaturated):
 
@@ -149,7 +151,7 @@ Default palette (P1, soft and desaturated):
 
 ![Side-by-side appearance on dark and light consoles](docs/images/theme-compare.png)
 
-> Both backgrounds are now covered: on a light console switch to `setTheme({ mode: 'light' })` for the matching presets; your overrides carry over across modes.
+> Both backgrounds are now covered: the default mode follows the system, so a light console gets the light presets out of the box (pin `setTheme({ mode })` only when the console theme diverges from the system); your overrides carry over across modes.
 
 #### Migrating from the Old Color Keys (Breaking)
 

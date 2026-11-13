@@ -94,11 +94,11 @@ prettyLog.info("带时间戳");  // [14:32:05.123] Info ...
 ```
 
 ### 自定义主题
-主题按「职责分离」组织：`fills` 是徽章填充色，`texts` 是文字色，`badgeText` 是徽章文字色，`rainbow` 是彩虹渐变，`mode` 切换深/浅控制台底。
+主题按「职责分离」组织：`fills` 是徽章填充色，`texts` 是文字色，`badgeText` 是徽章文字色，`rainbow` 是彩虹渐变，`mode` 切换深/浅控制台底。默认主题自动跟随系统 `prefers-color-scheme`（浏览器）；无 `matchMedia` 环境（如 Node 测试）默认浅色。
 ```javascript
 // 部分覆盖：未提及的键不动
 prettyLog.setTheme({
-  mode: 'light',                 // 'dark'（默认）| 'light'
+  mode: 'light',                 // 'dark' | 'light' —— 手动固定（默认自动跟随系统）
   badgeText: '#1f2330',          // 徽章文字色
   fills: { info: '#00FF00' },    // 徽章填充色（深浅两底通用）
   texts: { error: '#FF0000' },   // 文字色（按 mode 取对应预设）
@@ -106,7 +106,7 @@ prettyLog.setTheme({
 });
 
 prettyLog.getTheme();    // 当前主题（预设 + 用户覆盖的合并结果）
-prettyLog.resetTheme();  // 清空全部覆盖并回到 dark
+prettyLog.resetTheme();  // 清空全部覆盖并回到环境默认
 ```
 
 规则：
@@ -114,6 +114,8 @@ prettyLog.resetTheme();  // 清空全部覆盖并回到 dark
 - 未提及的键不动；值传 `undefined` 的键恢复预设默认，如 `setTheme({ fills: { info: undefined } })`。
 - 用户覆盖跨 `mode` 保留，`mode` 只切换未被覆盖的预设值；颜色在每次调用时读取，`setTheme` 立即生效。
 - `badgeText` 与 `setStyles({ titleColor })` 读写同一存储槽（默认 `#1f2330`），`resetTheme()` 会连带把这个槽恢复默认。
+- 默认 `mode` 在模块加载时解析一次：浏览器跟随系统 `prefers-color-scheme`；无 `matchMedia` 环境（如 Node 测试）回退浅色。`setTheme({ mode: 'dark' | 'light' })` 手动固定，`resetTheme()` 回到该环境默认。
+- 边界：页面侧读不到 DevTools **手动**设置的主题（平台限制），系统与控制台主题不一致时用 `setTheme({ mode })` 兜底。
 
 默认配色（P1 柔雾低饱）：
 
@@ -145,7 +147,7 @@ prettyLog.resetTheme();  // 清空全部覆盖并回到 dark
 
 ![深色 / 浅色控制台下的观感对照](docs/images/theme-compare.png)
 
-> 深/浅两套文字色均已适配：浅色控制台下切到 `setTheme({ mode: 'light' })` 即用浅底预设，用户覆盖跨模式保留。
+> 深/浅两套文字色均已适配：默认自动跟随系统，浅色控制台开箱即用浅底预设（仅当控制台主题与系统不一致时才需 `setTheme({ mode })` 固定），用户覆盖跨模式保留。
 
 #### 从旧版色键迁移（Breaking）
 

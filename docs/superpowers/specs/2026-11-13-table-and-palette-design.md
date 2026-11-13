@@ -57,6 +57,8 @@ pretty-log 的立身之本是「好看的 console.log」。当前两处失分：
 
 ### D2 配色：P1 柔雾低饱
 
+> Amendment (2026-11-13): 默认 mode 改为环境自适应（prefers-color-scheme，无 matchMedia 回退 light），用户裁定白底优先，覆盖本文「默认 dark」。
+
 （mockup 屏 3「P1 柔雾低饱 / P2 现状改良 / P3 鲜明跳脱」选 P1；屏 4 确认浅底适配版同样成立）
 
 深底（默认）值：
