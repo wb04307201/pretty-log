@@ -34,3 +34,6 @@ yarn-error.log*
 # 本地产物：Claude 技能暂存区、git worktree 工作区
 .superpowers/
 .worktrees/
+
+# 超级技能的设计/计划/mockup 工作文档，不进仓库
+docs/superpowers/
