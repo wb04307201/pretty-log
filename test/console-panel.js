@@ -4,6 +4,7 @@
  * pretty-log 走的是 console.log('%c 标题 \n%c 内容 ', style1, style2)：
  * 格式串里用 %c 占位，后续实参是 CSS 串。本模块拦截 console 的各个方法，
  * 把同样的参数还原成 DOM —— 按 %c 切分文本、把对应 CSS 应用到每个片段，
+ * 格式串里的 \n 按行拆开（框间用 <br> 断行，见 renderArgs），
  * 因此页面上的效果与真实控制台基本一致，图片日志（picture）也能正常显示。
  *
  * 原生 console 调用依然透传，开发者工具里的行为不受影响。
@@ -111,10 +112,20 @@ const renderArgs = (args) => {
 
   const styles = rest.filter((arg) => typeof arg === 'string')
   for (const segment of parseFormat(first, styles)) {
-    if (segment.text === '') continue
-    const span = el('span', 'pl-seg', segment.text)
-    if (segment.style) span.style.cssText = segment.style
-    fragment.appendChild(span)
+    // 每段文本按 \n 拆行、行间放 <br>：prettyPrint 在每段内容前都放一个
+    // \n（见 src/index.ts 的 prettyPrint），真实控制台按 \n 断行、每个色框
+    // 各占一行。色框本身是 inline-block（padding/border/图片要靠它），
+    // 行尾 \n 会被 inline-block 自己的格式化上下文吞掉，换行只能由框外的
+    // <br> 完成。内容内部的 \n 同理拆成多个同样式片段、各自成框——
+    // 与控制台行内边框逐行包边的行为一致。
+    const lines = segment.text.split('\n')
+    lines.forEach((line, index) => {
+      if (index > 0) fragment.appendChild(el('br'))
+      if (line === '') return
+      const span = el('span', 'pl-seg', line)
+      if (segment.style) span.style.cssText = segment.style
+      fragment.appendChild(span)
+    })
   }
   return fragment
 }
