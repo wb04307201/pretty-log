@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>rain/lightning mockup — 下雨 / 打雷</title>
+<style>
+  body { margin: 0; padding: 28px; background: #f6f8fa; color: #1f2328;
+         font: 14px/1.7 -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+  main { max-width: 720px; margin: 0 auto; }
+  h2 { margin: 0 0 6px; font-size: 20px; }
+  h3 { margin: 24px 0 6px; font-size: 16px; }
+  .subtitle { margin: 0 0 12px; color: #57606a; }
+  .fx-box { background: #0d1117; border-radius: 8px; overflow: hidden; height: 220px; }
+  .fx-box canvas { width: 100%; height: 100%; display: block; }
+  .fx-actions { display: flex; gap: 8px; margin: 10px 0 8px; flex-wrap: wrap; }
+  .mock-button { padding: 5px 14px; border: 1px solid #d0d7de; border-radius: 6px;
+                 background: #fff; color: #1f2328; font-size: 13px; cursor: pointer; }
+  .mock-button:hover { background: #f3f4f6; }
+  .fx-words { display: inline-block; padding: 2px 8px; border-radius: 999px;
+              background: rgba(88, 166, 255, .15); color: #58a6ff;
+              font-size: 12px; margin: 2px 4px 2px 0; }
+  .note { color: #57606a; font-size: 12px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h2>下雨 / 打雷 手感基准（rain-lightning mockup）</h2>
+  <p class="subtitle">单页基准稿：下方画布即引擎形态基准，粒子参数与 src/effects-render.ts 的 makeRain / makeLightning 逐值一致（此表即基准）。画布深灰底对齐 v1 mockup 观感。</p>
+
+  <section>
+    <h3>🌧 下雨</h3>
+    <p class="subtitle">细雨丝斜落：固定偏斜、无摆动、无尾迹、无水花；全部落出画面即收，6 秒封顶。</p>
+    <div class="fx-box"><canvas id="fx-preview-rain"></canvas></div>
+    <div class="fx-actions">
+      <button class="mock-button" id="fx-replay-rain">重播</button>
+    </div>
+    <div>
+      <span class="fx-words">下雨</span><span class="fx-words">暴雨</span><span class="fx-words">翻车了</span><span class="fx-words">凉了</span><span class="fx-words">寄了</span><span class="fx-words">芭比Q了</span>
+    </div>
+    <p class="note">参数基准：n = min(220, round(w*h/2600)+40)；单丝 {x: rand*w*1.2-w*0.1, y: rand*h*1.1-h*0.1, vy: 3.2+rand*2.0, len: 8+rand*12, alpha: 0.25+rand*0.35}；固定偏斜 slant = 0.28（x += vy*slant*s，线段 moveTo(p.x,p.y) → lineTo(p.x-len*slant, p.y-len)）；描边 rgba(110,130,165,alpha)、lineWidth 1；全部 y &gt; h+12 移出即收。</p>
+  </section>
+
+  <section>
+    <h3>⚡ 打雷</h3>
+    <p class="subtitle">单次一击锯齿折线闪电：闪白约 100ms、余晖渐隐约 900ms，总收尾 ≤2s、3 秒封顶；不做多连闪。浅底与深底双底板各放一条折线，验证白芯 + 深色底衬在浅色页面上立得住。</p>
+    <div class="fx-box" style="background:#ffffff"><canvas id="fx-preview-lightning-light"></canvas></div>
+    <div class="fx-actions">
+      <button class="mock-button" id="fx-replay-lightning-light">重播（浅底）</button>
+    </div>
+    <div class="fx-box"><canvas id="fx-preview-lightning-dark"></canvas></div>
+    <div class="fx-actions">
+      <button class="mock-button" id="fx-replay-lightning-dark">重播（深底）</button>
+    </div>
+    <div>
+      <span class="fx-words">打雷</span><span class="fx-words">雷人</span>
+    </div>
+    <p class="note">参数基准：一道锯齿折线，起点 (w*(0.3+rand*0.4), -10)，落点 (w*(0.2+rand*0.6), h*(0.55+rand*0.3))；中点位移 5 轮细分（每轮对相邻点取中点，x 加 (rand-0.5)*段长*0.5 的水平位移、y 不动；段数逐轮翻倍，终态 33 点）；全屏闪白 fillRect rgba(255,255,255,0.22) 约 100ms；余晖 glow = t&lt;100 ? 1 : max(0, 1-(t-100)/900)，t&gt;1000 收尾；单次一击，不做多连闪。描边双层（浅底可见性的关键）：深色底衬 rgba(25,35,70,glow*0.55) lineWidth 7 → 白芯 rgba(255,255,255,glow) lineWidth 2.5。两块底板默认各定格一条满辉折线作可见性基准，重播走完整动画后重新定格。</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var DPR = window.devicePixelRatio ? Math.min(window.devicePixelRatio, 2) : 1;
+  var MAX_MS = { rain: 6000, lightning: 3000 };
+  // 代次记在各自画布上：重播只打断同一画布的旧播放循环，不影响别的画布
+
+  function fit(canvas) {
+    var r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(r.width * DPR));
+    canvas.height = Math.max(1, Math.round(r.height * DPR));
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return { ctx: ctx, w: r.width, h: r.height };
+  }
+
+  /* ---------- 下雨：斜落雨丝（无摆动、无尾迹、无水花），参数即基准表 ---------- */
+  function makeRain(w, h) {
+    var n = Math.min(220, Math.round(w * h / 2600) + 40);
+    var slant = 0.28;
+    var ps = [];
+    for (var i = 0; i < n; i++) {
+      ps.push({
+        x: Math.random() * w * 1.2 - w * 0.1,
+        y: Math.random() * h * 1.1 - h * 0.1,
+        vy: 3.2 + Math.random() * 2.0,
+        len: 8 + Math.random() * 12,
+        alpha: 0.25 + Math.random() * 0.35
+      });
+    }
+    return {
+      step: function (ctx, dt) {
+        var s = Math.min(dt / 16.7, 2.5);
+        var alive = false;
+        for (var i = 0; i < ps.length; i++) {
+          var p = ps[i];
+          p.y += p.vy * s;
+          p.x += p.vy * slant * s;
+          if (p.y > h + 12) continue;
+          alive = true;
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(110, 130, 165, ' + p.alpha + ')';
+          ctx.lineWidth = 1;
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.len * slant, p.y - p.len);
+          ctx.stroke();
+        }
+        return !alive;
+      }
+    };
+  }
+
+  /* ---------- 打雷：单次一击锯齿折线（深色底衬 + 白芯），参数即基准表 ---------- */
+  function makeBolt(w, h) {
+    // 中点位移生成锯齿折线：初始两点（起点/落点），5 轮细分段数翻倍，终态 33 点
+    var pts = [
+      [w * (0.3 + Math.random() * 0.4), -10],
+      [w * (0.2 + Math.random() * 0.6), h * (0.55 + Math.random() * 0.3)]
+    ];
+    for (var round = 0; round < 5; round++) {
+      var next = [pts[0]];
+      for (var i = 0; i + 1 < pts.length; i++) {
+        var a = pts[i], b = pts[i + 1];
+        var dx = b[0] - a[0], dy = b[1] - a[1];
+        var segLen = Math.sqrt(dx * dx + dy * dy);
+        next.push([(a[0] + b[0]) / 2 + (Math.random() - 0.5) * segLen * 0.5, (a[1] + b[1]) / 2]); // x 水平位移，y 不动
+        next.push(b);
+      }
+      pts = next;
+    }
+    return pts;
+  }
+
+  function drawBolt(ctx, pts, glow) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.strokeStyle = 'rgba(25, 35, 70, ' + (glow * 0.55) + ')'; // 深色底衬：浅底可见性的关键
+    ctx.lineWidth = 7;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 255, 255, ' + glow + ')';      // 白芯
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  function makeLightning(w, h) {
+    var pts = makeBolt(w, h);
+    var t = 0;
+    return {
+      step: function (ctx, dt) {
+        t += dt;
+        var glow = t < 100 ? 1 : Math.max(0, 1 - (t - 100) / 900);
+        if (t < 100) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)'; // 全屏闪白约 100ms
+          ctx.fillRect(0, 0, w, h);
+        }
+        drawBolt(ctx, pts, glow);                     // 余晖渐隐，单次一击
+        return t > 100 + 900;
+      }
+    };
+  }
+
+  var MAKERS = { rain: makeRain, lightning: makeLightning };
+
+  function run(canvas, type, onDone) {
+    var my = canvas._fxGen = (canvas._fxGen || 0) + 1;
+    var dim = fit(canvas);
+    var fx = MAKERS[type](dim.w, dim.h);
+    var t0 = performance.now(), last = t0;
+    (function frame(now) {
+      if (canvas._fxGen !== my) return; // 已被新一轮取代，旧循环安静退场
+      now = now || performance.now();
+      var dt = now - last; last = now;
+      dim.ctx.clearRect(0, 0, dim.w, dim.h);
+      var done = fx.step(dim.ctx, dt);
+      if (!done && now - t0 < MAX_MS[type]) {
+        requestAnimationFrame(frame);
+      } else {
+        dim.ctx.clearRect(0, 0, dim.w, dim.h);
+        if (onDone) onDone();
+      }
+    })(t0);
+  }
+
+  var canvas = document.getElementById('fx-preview-rain');
+  document.getElementById('fx-replay-rain').addEventListener('click', function () { run(canvas, 'rain'); });
+  setTimeout(function () { run(canvas, 'rain'); }, 250); // 进页面自动播一遍
+
+  /* 打雷：两块底板各定格一条满辉折线（可见性基准），重播/自动播完整动画后重新定格 */
+  function drawStaticLightning(previewCanvas) {
+    var dim = fit(previewCanvas);
+    dim.ctx.clearRect(0, 0, dim.w, dim.h);
+    drawBolt(dim.ctx, makeBolt(dim.w, dim.h), 1);
+  }
+  ['light', 'dark'].forEach(function (tone) {
+    var c = document.getElementById('fx-preview-lightning-' + tone);
+    drawStaticLightning(c);
+    document.getElementById('fx-replay-lightning-' + tone).addEventListener('click', function () {
+      run(c, 'lightning', function () { drawStaticLightning(c); });
+    });
+    setTimeout(function () {
+      run(c, 'lightning', function () { drawStaticLightning(c); });
+    }, 250); // 进页面自动播一遍
+  });
+})();
+</script>
+</body>
+</html>

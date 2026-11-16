@@ -6,12 +6,29 @@
     <link rel="stylesheet" href="./console-panel.css">
 </head>
 <body>
+<!-- 触发词彩蛋演示区：悬浮于 console 面板之上（面板 z-index 1000）。
+     动画画布 z-index 99999 但 pointer-events:none，播放期间按钮照常可点。 -->
+<section id="fx-demo"
+         style="position:fixed;top:8px;right:8px;z-index:1001;max-width:380px;
+                background:#292a2d;color:#e8eaed;border:1px solid #3c4043;border-radius:6px;
+                padding:10px 12px;font:13px/1.6 Consolas,'Microsoft YaHei',sans-serif;">
+    <strong style="display:block;margin-bottom:4px;">触发词彩蛋</strong>
+    <p style="margin:0 0 8px;color:#9aa0a6;">点击按钮输出带触发词的日志即可播放动画：连续触发只播一次，播完约 2 秒冷却。</p>
+    <button id="fx-btn-fireworks">info('烟花')</button>
+    <button id="fx-btn-confetti">info('撒花')</button>
+    <button id="fx-btn-snow">info('下雪')</button>
+    <button id="fx-btn-rain">info('下雨')</button>
+    <button id="fx-btn-lightning">info('打雷')</button>
+    <button id="fx-btn-toggle">关闭彩蛋</button>
+</section>
 <script type="module">
     // 必须最先安装面板，才能捕获后续所有日志
     import { installConsolePanel } from './console-panel.js'
     installConsolePanel()
 
     import * as prettyLog from '../src/index.ts'
+    // 暴露到全局便于目检时在控制台注入样例数据（仅测试页，不影响库本身）
+    window.prettyLog = prettyLog
 
     // 本地样图：内联为 data URI，彻底不依赖网络与打包器的静态资源管线。
     // （早前试过 './sample.png' 与 '/test/sample.png' 两种相对路径，
@@ -44,7 +61,7 @@
     prettyLog.debug("Debug", "详细调试数据", {debug: true})
 
     // 彩虹
-    prettyLog.rainbow("来 左边 跟我一起画个龙在你右边 画一道彩虹")
+    prettyLog.rainbow("来 左边 跟我一起画个龙 在你右边 画一道彩虹")
 
     // 组输出，默认展开
     prettyLog.group("一个组输出", ["组内容1", "组内容2", "组内容3"])
@@ -52,8 +69,14 @@
     // 组输出，折叠
     prettyLog.group("一个组输出", ["组内容1", "组内容2", "组内容3"], false, '#e66815')
 
-    // 表格
-    prettyLog.table([{a: 1, b: 1, c: 1}, {a: 2, b: 2, c: 2}, {a: 3, b: 3, c: 3}])
+    // 表格：键并集列 + 类型着色/数值右对齐 + CJK 对齐 + 缺键/null + 超长截断
+    prettyLog.table([
+        {id: 1, name: '张三', role: 'dev', score: 92.5, note: '全键行'},
+        {id: 2, name: 'Alice', role: 'design', score: 88},
+        {id: 3, name: '王小明', role: 'pm', score: null, note: 'score 为 null 显示灰色'},
+        {id: 4, name: 'Bob', score: 76.4},
+        {id: 5, name: '赵铁柱', role: 'qa', score: 91, note: '这一格内容超级长长长长长长长长长长长长长长长'},
+    ], '员工数据')
 
     // 计时器
     prettyLog.time('计时器');
@@ -96,10 +119,10 @@
 
     // --- 自定义主题 ---
     console.log('--- 自定义主题 ---')
-    prettyLog.setTheme({ infoColor: '#00FF00', errorColor: '#FF0000' })
+    prettyLog.setTheme({ fills: { info: '#00FF00', error: '#FF0000' }, texts: { info: '#00FF00', error: '#FF0000' } })
     prettyLog.info("绿色信息")
     prettyLog.error("红色错误")
-    prettyLog.setTheme({ infoColor: '#A6A6A6', errorColor: '#EC7270' })  // 恢复
+    prettyLog.resetTheme()  // 恢复
 
     // --- 一次性配置 ---
     console.log('--- 一次性配置 ---')
@@ -150,6 +173,22 @@
     console.log('--- 百分号转义 ---')
     prettyLog.info("注入测试", "这里有 %c 和 %s，应该原样显示")
     prettyLog.info("百分号", "完成 50%")
+
+    // ===== 触发词彩蛋演示 =====
+    // 各按钮分别输出带触发词的日志（单击触发一次，可感受冷却）；
+    // 「关闭彩蛋」开关走 setEffects({ enabled }) 一键启停。
+    console.log('--- 触发词彩蛋 ---')
+    document.getElementById('fx-btn-fireworks').addEventListener('click', () => prettyLog.info('烟花'))
+    document.getElementById('fx-btn-confetti').addEventListener('click', () => prettyLog.info('撒花'))
+    document.getElementById('fx-btn-snow').addEventListener('click', () => prettyLog.info('下雪'))
+    document.getElementById('fx-btn-rain').addEventListener('click', () => prettyLog.info('下雨'))
+    document.getElementById('fx-btn-lightning').addEventListener('click', () => prettyLog.info('打雷'))
+    const fxToggleBtn = document.getElementById('fx-btn-toggle')
+    fxToggleBtn.addEventListener('click', () => {
+        const enabled = !prettyLog.getEffects().enabled
+        prettyLog.setEffects({ enabled })
+        fxToggleBtn.textContent = enabled ? '关闭彩蛋' : '开启彩蛋'
+    })
 </script>
 </body>
 </html>

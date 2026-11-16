@@ -1,0 +1,313 @@
+<h2>三个动画的手感，你来挑</h2>
+<p class="subtitle">卡片里是实时预览（进页面自动播一遍，点卡片或「重播」可再看）。「全屏试玩」把动画铺满整个页面——它是透明的一层，不接收鼠标事件，播放时你照样能点按钮、选卡片。</p>
+
+<style>
+  .fx-box { position: relative; background: #0d1117; border-radius: 8px; overflow: hidden; height: 180px; }
+  .fx-box canvas { width: 100%; height: 100%; display: block; }
+  .fx-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .fx-words { display: inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(88, 166, 255, .15); color: #58a6ff; font-size: 12px; margin: 2px 4px 2px 0; }
+  #fx-status { min-height: 1.4em; margin-top: 10px; font-family: ui-monospace, monospace; }
+</style>
+
+<div class="cards" data-multiselect>
+
+  <div class="card" data-choice="fireworks" onclick="toggleSelect(this); window.fxPreview('fireworks')">
+    <div class="card-image">
+      <div class="fx-box"><canvas id="fx-preview-fireworks"></canvas></div>
+      <div class="fx-actions">
+        <button class="mock-button" onclick="event.stopPropagation(); window.fxPreview('fireworks')">重播</button>
+        <button class="mock-button" onclick="event.stopPropagation(); window.fxOverlay('fireworks')">全屏试玩</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>🎆 烟花</h3>
+      <p>火箭拖着尾巴升空，「砰」地炸开成一圈彩色火星，带重力缓缓落下。三个里最热烈的一档。</p>
+      <div><span class="fx-words">烟花</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="confetti" onclick="toggleSelect(this); window.fxPreview('confetti')">
+    <div class="card-image">
+      <div class="fx-box"><canvas id="fx-preview-confetti"></canvas></div>
+      <div class="fx-actions">
+        <button class="mock-button" onclick="event.stopPropagation(); window.fxPreview('confetti')">重播</button>
+        <button class="mock-button" onclick="event.stopPropagation(); window.fxOverlay('confetti')">全屏试玩</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>🎊 撒花</h3>
+      <p>彩色纸屑从天上飘落，一边打转一边摇摆，慢慢落出画面。欢快，但不炸。</p>
+      <div><span class="fx-words">撒花</span><span class="fx-words">庆祝</span><span class="fx-words">好耶</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="snow" onclick="toggleSelect(this); window.fxPreview('snow')">
+    <div class="card-image">
+      <div class="fx-box"><canvas id="fx-preview-snow"></canvas></div>
+      <div class="fx-actions">
+        <button class="mock-button" onclick="event.stopPropagation(); window.fxPreview('snow')">重播</button>
+        <button class="mock-button" onclick="event.stopPropagation(); window.fxOverlay('snow')">全屏试玩</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>❄️ 下雪</h3>
+      <p>雪花大小不一，慢悠悠斜着飘，安安静静落一会儿。氛围型，完全不抢戏。</p>
+      <div><span class="fx-words">下雪</span><span class="fx-words">雪花</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top: 28px;">
+  <div class="label">防轰炸试玩</div>
+  <p class="subtitle">下面的按钮模拟「日志里命中了触发词」。连点几下试试：同一时刻只播一个动画，播完还有约 2 秒冷却，期间再命中会直接跳过。</p>
+  <div class="fx-actions">
+    <button class="mock-button" onclick="window.fxOverlay('fireworks')">命中「烟花」</button>
+    <button class="mock-button" onclick="window.fxOverlay('confetti')">命中「撒花」</button>
+    <button class="mock-button" onclick="window.fxOverlay('snow')">命中「下雪」</button>
+  </div>
+  <p id="fx-status"></p>
+</div>
+
+<div class="section" style="margin-top: 28px;">
+  <p class="subtitle"><strong>怎么挑：</strong>点卡片选中 = 这个手感可以，照这样做；不点 = 想调或者干脆砍掉。挑完在终端跟我说。</p>
+</div>
+
+<script>
+(function () {
+  var DPR = window.devicePixelRatio ? Math.min(window.devicePixelRatio, 2) : 1;
+  var active = {};   // key -> true 表示正在播
+  var gen = {};      // key -> 代次，用于打断旧的播放循环
+  var guard = {};    // key -> 冷却截止时间戳
+
+  function fit(canvas) {
+    var r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(r.width * DPR));
+    canvas.height = Math.max(1, Math.round(r.height * DPR));
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return { ctx: ctx, w: r.width, h: r.height };
+  }
+
+  var MAX_MS = { fireworks: 7000, confetti: 6000, snow: 7000 };
+
+  /* ---------- 烟花：火箭升空 + 炸开火星 ---------- */
+  function makeFireworks(w, h) {
+    var g = 0.055 * Math.max(0.6, h / 380);
+    var rockets = [], sparks = [], burstsLeft = 3;
+    function burst(x, y, hue) {
+      var n = 64 + (Math.random() * 36) | 0;
+      for (var i = 0; i < n; i++) {
+        var a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+        var sp = (1.2 + Math.random() * (h * 0.014 + 2.2)) * (0.35 + Math.random() * 0.75);
+        sparks.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, hue: hue + (Math.random() * 50 - 25), life: 1, decay: 0.010 + Math.random() * 0.013, trail: [] });
+      }
+    }
+    return {
+      step: function (ctx, dt) {
+        var s = Math.min(dt / 16.7, 2.5);
+        if (rockets.length === 0 && sparks.length < 30 && burstsLeft > 0) {
+          burstsLeft--;
+          rockets.push({ x: w * (0.2 + Math.random() * 0.6), y: h + 8, vx: (Math.random() - 0.5) * 1.4, vy: -(h * 0.0155 + Math.random() * h * 0.008), hue: Math.random() * 360, trail: [] });
+        }
+        var i, j, p, t;
+        for (i = rockets.length - 1; i >= 0; i--) {
+          var r = rockets[i];
+          r.x += r.vx * s; r.y += r.vy * s; r.vy += g * 1.7 * s;
+          r.trail.push([r.x, r.y]); if (r.trail.length > 12) r.trail.shift();
+          if (r.vy >= -0.5 || r.y <= h * 0.18) { burst(r.x, r.y, r.hue); rockets.splice(i, 1); continue; }
+          for (j = 0; j < r.trail.length; j++) {
+            t = r.trail[j];
+            ctx.beginPath();
+            ctx.fillStyle = 'hsla(' + r.hue + ', 90%, 65%, ' + (0.15 + 0.6 * j / r.trail.length) + ')';
+            ctx.arc(t[0], t[1], 1 + 2.2 * j / r.trail.length, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.beginPath();
+          ctx.fillStyle = 'hsla(' + r.hue + ', 100%, 82%, .95)';
+          ctx.arc(r.x, r.y, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        for (i = sparks.length - 1; i >= 0; i--) {
+          p = sparks[i];
+          p.trail.push([p.x, p.y]); if (p.trail.length > 5) p.trail.shift();
+          p.x += p.vx * s; p.y += p.vy * s;
+          p.vy += g * s; p.vx *= Math.pow(0.982, s); p.vy *= Math.pow(0.982, s);
+          p.life -= p.decay * s;
+          if (p.life <= 0) { sparks.splice(i, 1); continue; }
+          for (j = 0; j < p.trail.length; j++) {
+            t = p.trail[j];
+            ctx.beginPath();
+            ctx.fillStyle = 'hsla(' + p.hue + ', 95%, 62%, ' + (0.45 * p.life * j / p.trail.length) + ')';
+            ctx.arc(t[0], t[1], 1.6 * p.life, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.beginPath();
+          ctx.fillStyle = 'hsla(' + p.hue + ', 95%, 62%, ' + p.life + ')';
+          ctx.arc(p.x, p.y, 1.4 + 1.6 * p.life, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        return burstsLeft === 0 && rockets.length === 0 && sparks.length === 0;
+      }
+    };
+  }
+
+  /* ---------- 撒花：纸屑打转飘落（深色细描边，浅色页面也看得清） ---------- */
+  function makeConfetti(w, h) {
+    var colors = ['#ff5964', '#ffd166', '#06d6a0', '#4cc9f0', '#c77dff', '#f15bb5', '#ffffff'];
+    var n = Math.min(220, Math.round(w * h / 2400) + 50);
+    var ps = [];
+    for (var i = 0; i < n; i++) {
+      ps.push({
+        x: Math.random() * w, y: Math.random() * h * 1.1 - h * 0.1,
+        vy: 1.0 + Math.random() * 2.3,
+        swayA: 6 + Math.random() * 18, swayF: 0.012 + Math.random() * 0.022, ph: Math.random() * Math.PI * 2,
+        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.22,
+        size: 4 + Math.random() * 7,
+        color: colors[i % colors.length],
+        round: Math.random() < 0.35
+      });
+    }
+    return {
+      step: function (ctx, dt) {
+        var s = Math.min(dt / 16.7, 2.5);
+        var alive = false;
+        for (var i = 0; i < ps.length; i++) {
+          var p = ps[i];
+          p.y += p.vy * s;
+          p.x += Math.sin(p.y * p.swayF + p.ph) * 0.9 * s;
+          p.rot += p.vr * s;
+          if (p.y > h + 16) continue;
+          alive = true;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = 0.92;
+          ctx.strokeStyle = 'rgba(25, 40, 80, .38)';
+          ctx.lineWidth = 1;
+          if (p.round) {
+            ctx.beginPath();
+            ctx.arc(0, 0, p.size * 0.45, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.fillRect(-p.size / 2, -p.size * 0.32, p.size, p.size * 0.64);
+            ctx.strokeRect(-p.size / 2, -p.size * 0.32, p.size, p.size * 0.64);
+          }
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        return !alive;
+      }
+    };
+  }
+
+  /* ---------- 下雪：带深色底衬，浅色页面也能看清 ---------- */
+  function makeSnow(w, h) {
+    var n = Math.min(260, Math.round(w * h / 1900) + 60);
+    var ps = [];
+    for (var i = 0; i < n; i++) {
+      ps.push({
+        x: Math.random() * w, y: Math.random() * h * 1.1 - h * 0.1,
+        r: 0.9 + Math.random() * 2.6,
+        vy: 0.45 + Math.random() * 1.15,
+        swayA: 4 + Math.random() * 13, swayF: 0.008 + Math.random() * 0.016, ph: Math.random() * Math.PI * 2,
+        alpha: 0.5 + Math.random() * 0.5
+      });
+    }
+    return {
+      step: function (ctx, dt) {
+        var s = Math.min(dt / 16.7, 2.5);
+        var alive = false;
+        for (var i = 0; i < ps.length; i++) {
+          var p = ps[i];
+          p.y += p.vy * s;
+          p.x += Math.sin(p.y * p.swayF + p.ph) * 0.7 * s;
+          if (p.y > h + 8) continue;
+          alive = true;
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(35, 50, 90, ' + (p.alpha * 0.32) + ')';
+          ctx.arc(p.x, p.y, p.r + 1.1, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(240, 246, 255, ' + p.alpha + ')';
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        return !alive;
+      }
+    };
+  }
+
+  var MAKERS = { fireworks: makeFireworks, confetti: makeConfetti, snow: makeSnow };
+
+  /* restart=true 时打断正在播放的旧动画，直接重开一轮（用于用户主动点击） */
+  function run(canvas, key, type, onEnd, restart) {
+    if (active[key] && !restart) return false;
+    var g = (gen[key] || 0) + 1;
+    gen[key] = g;
+    var dim = fit(canvas);
+    var fx = MAKERS[type](dim.w, dim.h);
+    var t0 = performance.now(), last = t0;
+    active[key] = true;
+    (function frame(now) {
+      if (gen[key] !== g) return;   // 已被新的一轮取代，旧循环安静退场
+      now = now || performance.now();
+      var dt = now - last; last = now;
+      dim.ctx.clearRect(0, 0, dim.w, dim.h);
+      var done = fx.step(dim.ctx, dt);
+      if (!done && now - t0 < MAX_MS[type]) {
+        requestAnimationFrame(frame);
+      } else {
+        dim.ctx.clearRect(0, 0, dim.w, dim.h);
+        if (gen[key] === g) {
+          delete active[key];
+          if (onEnd) onEnd();
+        }
+      }
+    })(t0);
+    return true;
+  }
+
+  var NAMES = { fireworks: '烟花', confetti: '撒花', snow: '下雪' };
+  var statusEl, statusTimer;
+
+  function status(msg) {
+    if (!statusEl) statusEl = document.getElementById('fx-status');
+    if (!statusEl) return;
+    statusEl.textContent = msg;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { statusEl.textContent = ''; }, 3500);
+  }
+
+  window.addEventListener('error', function (e) {
+    status('⚠ 脚本报错：' + e.message);
+  });
+
+  window.fxPreview = function (type) {
+    var canvas = document.getElementById('fx-preview-' + type);
+    if (canvas) run(canvas, 'preview-' + type, type, null, true);
+  };
+
+  window.fxOverlay = function (type) {
+    var now = performance.now();
+    if (active['overlay'] || (guard['overlay'] && now < guard['overlay'])) {
+      status('⏱ 冷却中，这次命中直接跳过（防轰炸生效）');
+      return;
+    }
+    var canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:99999';
+    document.body.appendChild(canvas);
+    status('✓ 命中「' + NAMES[type] + '」，动画播放中（页面照常可点）');
+    run(canvas, 'overlay', type, function () {
+      canvas.remove();
+      guard['overlay'] = performance.now() + 2000;
+    }, false);
+  };
+
+  setTimeout(function () { window.fxPreview('fireworks'); }, 250);
+  setTimeout(function () { window.fxPreview('confetti'); }, 650);
+  setTimeout(function () { window.fxPreview('snow'); }, 1050);
+})();
+</script>

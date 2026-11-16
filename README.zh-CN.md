@@ -6,6 +6,8 @@
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
+![pretty-log 输出效果](docs/images/hero.png)
+
 ## 安装
 ```sh
 npm install @wb04307201/pretty-log
@@ -62,6 +64,8 @@ prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 ```
 
+![组输出、表格、图片与带前缀的 logger](docs/images/advanced.png)
+
 ## 高级功能
 
 ### 日志级别过滤
@@ -90,13 +94,93 @@ prettyLog.info("带时间戳");  // [14:32:05.123] Info ...
 ```
 
 ### 自定义主题
+主题按「职责分离」组织：`fills` 是徽章填充色，`texts` 是文字色，`badgeText` 是徽章文字色，`rainbow` 是彩虹渐变，`mode` 切换深/浅控制台底。默认主题自动跟随系统 `prefers-color-scheme`（浏览器）；无 `matchMedia` 环境（如 Node 测试）默认浅色。
 ```javascript
+// 部分覆盖：未提及的键不动
 prettyLog.setTheme({
-  infoColor: '#00FF00',
-  errorColor: '#FF0000',
-  groupColor: '#FF00FF',
+  mode: 'light',                 // 'dark' | 'light' —— 手动固定（默认自动跟随系统）
+  badgeText: '#1f2330',          // 徽章文字色
+  fills: { info: '#00FF00' },    // 徽章填充色（深浅两底通用）
+  texts: { error: '#FF0000' },   // 文字色（按 mode 取对应预设）
+  rainbow: { colors: ['#f9a8d4', '#93c5fd'], text: '#23273a' },
 });
+
+prettyLog.getTheme();    // 当前主题（预设 + 用户覆盖的合并结果）
+prettyLog.resetTheme();  // 清空全部覆盖并回到环境默认
 ```
+
+规则：
+
+- 未提及的键不动；值传 `undefined` 的键恢复预设默认，如 `setTheme({ fills: { info: undefined } })`。
+- 用户覆盖跨 `mode` 保留，`mode` 只切换未被覆盖的预设值；颜色在每次调用时读取，`setTheme` 立即生效。
+- `badgeText` 与 `setStyles({ titleColor })` 读写同一存储槽（默认 `#1f2330`），`resetTheme()` 会连带把这个槽恢复默认。
+- 默认 `mode` 在模块加载时解析一次：浏览器跟随系统 `prefers-color-scheme`；无 `matchMedia` 环境（如 Node 测试）回退浅色。`setTheme({ mode: 'dark' | 'light' })` 手动固定，`resetTheme()` 回到该环境默认。
+- 边界：页面侧读不到 DevTools **手动**设置的主题（平台限制），系统与控制台主题不一致时用 `setTheme({ mode })` 兜底。
+
+默认配色（P1 柔雾低饱）：
+
+`fills` 徽章填充色（深浅两底通用）：
+
+| 键 | 色值 | 键 | 色值 |
+|---|---|---|---|
+| `debug` | `#a5b4fc` | `error` | `#fca5a5` |
+| `info` | `#93c5fd` | `group` | `#c4b5fd` |
+| `success` | `#86efac` | `accent` | `#93c5fd` |
+| `warning` | `#fde68a` | | |
+
+`texts` 文字色（按 `mode` 取对应预设）：
+
+| 键 | 深底（dark） | 浅底（light） |
+|---|---|---|
+| `debug` | `#a5b4fc` | `#6366f1` |
+| `info` | `#93c5fd` | `#2563eb` |
+| `success` | `#86efac` | `#15803d` |
+| `warning` | `#fde68a` | `#b45309` |
+| `error` | `#fca5a5` | `#dc2626` |
+| `group` | `#c4b5fd` | `#6d28d9` |
+| `time` | `#93c5fd` | `#2563eb` |
+| `null` | `#8b93a7` | `#6b7280` |
+| `meta` | `#8b93a7` | `#5f6368` |
+| `body` | `#e8eaed` | `#3c4043` |
+
+`badgeText` 默认 `#1f2330`；`rainbow` 默认渐变 `#f9a8d4 → #c4b5fd → #93c5fd → #6ee7b7 → #fde68a`、文字 `#23273a`（两者深浅两底通用）。
+
+![深色 / 浅色控制台下的观感对照](docs/images/theme-compare.png)
+
+> 深/浅两套文字色均已适配：默认自动跟随系统，浅色控制台开箱即用浅底预设（仅当控制台主题与系统不一致时才需 `setTheme({ mode })` 固定），用户覆盖跨模式保留。
+
+#### 从旧版色键迁移（Breaking）
+
+旧的平铺色键已移除（breaking change），按下表改写：
+
+| 旧键（已移除） | 新写法 |
+|---|---|
+| `infoColor` | `fills.info` + `texts.info` |
+| `errorColor` | `fills.error` + `texts.error` |
+| `warningColor` | `fills.warning` + `texts.warning` |
+| `successColor` | `fills.success` + `texts.success` |
+| `debugColor` | `fills.debug` + `texts.debug` |
+| `groupColor` | `fills.group` + `texts.group` |
+| `timeColor` | `fills.accent` + `texts.time` |
+
+### 美化表格
+`table(data, title?)` 自绘输出 `%c` 文本表格（标题默认 `'Table'`）：斑马纹、类型着色（数值用 `texts.warning`，数值样式字符串如 `'92.5'` 同样计入；空值用 `texts.null`；字符串用 `texts.body`；缺键格无类型色）、CJK 双宽对齐、单元格超过 24 显示列截断。外层是 `console.group` 组外壳，数组输入还会附一行 `N 行 × M 列` 计数段——混形状数组（native 兜底）只显 `N 行`，空表显 `0 行 × 0 列`。
+
+形状分支：对象数组（各行键并集作列）、数组数组（索引列）、原始值数组（单列 `(value)`）走自绘；单对象、`Map`、`Set`、混形状数组等不适用自绘的输入，在组外壳内回退原生 `console.table`（保留列排序、对象展开等交互）。与其它日志函数一致：遵守级别过滤，并写入历史（历史存未截断的全量纯文本）。
+
+```javascript
+prettyLog.table([{ a: 1, b: '一' }, { a: 2, b: '二' }], '用户列表');
+```
+
+逃生口：想要原生交互（或自绘渲染不合适）时，可把内芯整体切回 `console.table`，组外壳与计数段不变：
+
+```javascript
+prettyLog.setTableMode('native');   // 'pretty'（默认）| 'native'
+prettyLog.setTableMode('pretty');   // 切回自绘
+// 等价写法：prettyLog.configure({ tableMode: 'native' })
+```
+
+`withPrefix(prefix).table` 与 `table` 完全一致，仅标题多一段前缀。
 
 ### 一次性配置
 ```javascript
@@ -104,7 +188,8 @@ prettyLog.configure({
   logLevel: 'info',
   showEmoji: true,
   showTimestamp: true,
-  theme: { infoColor: '#00FF00' },
+  theme: { fills: { info: '#00FF00' } },
+  tableMode: 'pretty',
 });
 ```
 
@@ -155,7 +240,7 @@ prettyLog.clearCounters();
 ```
 
 ### 带前缀的 logger
-返回一组带固定前缀的日志函数，级别、主题与过滤规则与标准日志函数一致。
+返回一组带固定前缀的日志函数（`debug` / `info` / `error` / `warning` / `success` / `table`），级别、主题与过滤规则与标准日志函数一致。
 ```javascript
 const userLog = prettyLog.withPrefix('用户模块');
 userLog.info('登录成功', { userId: 123 });
@@ -187,5 +272,47 @@ prettyLog.info('这条不会出现');
 
 注意：生产环境下 `timer` 仍会执行你传入的函数，只是日志被抑制。
 
-## 输出
-![img.png](https://github.com/wb04307201/pretty-log/blob/master/img.png?raw=true)
+### 触发词动画（彩蛋）
+日志文本命中触发词时，页面上会播放一个全屏粒子动画。按词表顺序做大小写敏感的子串匹配，首个命中生效；一次日志调用最多播一个动画，连续触发只播一次（播完约 2 秒冷却）。
+
+![撒花与打雷的触发效果](docs/images/effects.gif)
+
+默认词表：
+
+| 触发词 | 动画 |
+|---|---|
+| 打雷 | `lightning` |
+| 雷人 | `lightning` |
+| 下雨 | `rain` |
+| 暴雨 | `rain` |
+| 翻车了 | `rain` |
+| 凉了 | `rain` |
+| 寄了 | `rain` |
+| 芭比Q了 | `rain` |
+| 下雪 | `snow` |
+| 雪花 | `snow` |
+| 初雪 | `snow` |
+| 烟花 | `fireworks` |
+| 撒花 | `confetti` |
+| 庆祝 | `confetti` |
+| 好耶 | `confetti` |
+| 恭喜 | `confetti` |
+
+键序即命中优先级：坏消息词排前——「庆祝上线翻车了」播的是下雨（翻车了 胜过 庆祝），「庆祝上线打雷了」播的是打雷。
+
+```javascript
+import { configure, setEffects, DEFAULT_EFFECT_TRIGGERS } from '@wb04307201/pretty-log';
+
+// setEffects({ triggers }) 会整表替换 —— 展开
+// DEFAULT_EFFECT_TRIGGERS 可在保留默认词的基础上扩展
+setEffects({ triggers: { ...DEFAULT_EFFECT_TRIGGERS, '开工': 'confetti' } });
+
+// 一键关闭
+setEffects({ enabled: false });
+
+// 也可以通过 configure() 配置
+configure({ effects: { enabled: true, cooldownMs: 2000 } });
+```
+
+说明：`NODE_ENV=production` 时不播动画。
+说明：用户开启 `prefers-reduced-motion: reduce` 时不播动画。

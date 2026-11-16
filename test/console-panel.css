@@ -13,13 +13,24 @@ body.has-console-panel {
 }
 
 #console-panel {
+  /* 主题变量：默认深色黑底，.theme-light 覆盖为白底。
+     日志内容的内联 %c 样式刻意不参与换肤——切白底就是为了看
+     pretty-log 的样式在浅色 console 上是什么观感。 */
+  --pl-bg: #202124;
+  --pl-fg: #e8eaed;
+  --pl-muted: #9aa0a6;
+  --pl-border: #3c4043;
+  --pl-header-bg: #292a2d;
+  --pl-btn-bg: #3c4043;
+  --pl-btn-hover: #4a4d51;
+  --pl-btn-border: #5f6368;
   position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: #202124;
-  color: #e8eaed;
-  border-top: 1px solid #3c4043;
+  background: var(--pl-bg);
+  color: var(--pl-fg);
+  border-top: 1px solid var(--pl-border);
   /* 字体栈必须同时兜住三类字形：
      1. 中文 —— Consolas 等宽字体没有 CJK 字形，中文会显示成横线
      2. Emoji —— 同理，emoji 会显示成占位方框
@@ -29,6 +40,18 @@ body.has-console-panel {
     'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI Emoji', 'Noto Color Emoji',
     monospace;
   z-index: 1000;
+}
+
+/* 白底主题：只换面板自身的配色变量 */
+#console-panel.theme-light {
+  --pl-bg: #ffffff;
+  --pl-fg: #202124;
+  --pl-muted: #5f6368;
+  --pl-border: #dadce0;
+  --pl-header-bg: #f1f3f4;
+  --pl-btn-bg: #e8eaed;
+  --pl-btn-hover: #dadce0;
+  --pl-btn-border: #bdc1c6;
 }
 
 /* 收起时只留工具栏一条 */
@@ -52,8 +75,8 @@ body.has-console-panel {
   align-items: center;
   gap: 10px;
   padding: 5px 10px;
-  background: #292a2d;
-  border-bottom: 1px solid #3c4043;
+  background: var(--pl-header-bg);
+  border-bottom: 1px solid var(--pl-border);
   flex: 0 0 auto;
   position: sticky;
   top: 0;
@@ -61,14 +84,14 @@ body.has-console-panel {
 }
 
 #console-panel .pl-count {
-  color: #9aa0a6;
+  color: var(--pl-muted);
   font-weight: normal;
 }
 
 .pl-btn {
-  background: #3c4043;
-  color: #e8eaed;
-  border: 1px solid #5f6368;
+  background: var(--pl-btn-bg);
+  color: var(--pl-fg);
+  border: 1px solid var(--pl-btn-border);
   border-radius: 3px;
   padding: 2px 8px;
   cursor: pointer;
@@ -76,7 +99,7 @@ body.has-console-panel {
 }
 
 .pl-btn:hover {
-  background: #4a4d51;
+  background: var(--pl-btn-hover);
 }
 
 #console-output {
@@ -132,12 +155,12 @@ body.has-console-panel {
 
 .pl-group-head::before {
   content: '▾ ';
-  color: #9aa0a6;
+  color: var(--pl-muted);
 }
 
 .pl-group-body {
   padding-left: 14px;
-  border-left: 2px solid #3c4043;
+  border-left: 2px solid var(--pl-border);
   margin-left: 4px;
 }
 
@@ -154,19 +177,19 @@ table.pl-table {
 
 table.pl-table th,
 table.pl-table td {
-  border: 1px solid #3c4043;
+  border: 1px solid var(--pl-border);
   padding: 3px 8px;
   text-align: left;
   white-space: pre-wrap;
 }
 
 table.pl-table th {
-  background: #292a2d;
-  color: #9aa0a6;
+  background: var(--pl-header-bg);
+  color: var(--pl-muted);
   font-weight: normal;
 }
 
 table.pl-table td.pl-idx {
-  color: #9aa0a6;
+  color: var(--pl-muted);
   text-align: right;
 }

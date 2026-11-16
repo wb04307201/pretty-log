@@ -41,6 +41,11 @@ function titleStyle(args: unknown[]): string {
   return style ?? ''
 }
 
+/** 取出一条日志的内容 CSS 样式（单内容调用时为第二个样式实参） */
+function contentStyle(args: unknown[]): string {
+  return typeof args[2] === 'string' ? (args[2] as string) : ''
+}
+
 /**
  * 取历史条目的首段内容作为标识。
  * 单参数调用时 title 是默认标题（'Info' 等），内容才承载调用方传入的值。
@@ -56,16 +61,8 @@ function reset(): void {
     showEmoji: false,
     showTimestamp: false,
     historySize: 200,
-    theme: {
-      infoColor: '#A6A6A6',
-      errorColor: '#EC7270',
-      warningColor: '#F1AC6A',
-      successColor: '#95DA69',
-      debugColor: '#5BC0EB',
-      groupColor: '#7B79E8',
-      timeColor: '#7B79E8',
-    },
   })
+  prettyLog.resetTheme()
   prettyLog.clearHistory()
 }
 
@@ -74,11 +71,20 @@ function reset(): void {
 test('R1: setTheme 改变五个日志函数的实际输出颜色', () => {
   reset()
   prettyLog.setTheme({
-    infoColor: '#00FF00',
-    errorColor: '#FF0000',
-    warningColor: '#0000FF',
-    successColor: '#FF00FF',
-    debugColor: '#123456',
+    fills: {
+      info: '#00FF00',
+      error: '#FF0000',
+      warning: '#0000FF',
+      success: '#FF00FF',
+      debug: '#123456',
+    },
+    texts: {
+      info: '#00FF00',
+      error: '#FF0000',
+      warning: '#0000FF',
+      success: '#FF00FF',
+      debug: '#123456',
+    },
   })
 
   const cases = [
@@ -94,14 +100,18 @@ test('R1: setTheme 改变五个日志函数的实际输出颜色', () => {
     assert.equal(out.length, 1, `${fn} 应输出一次`)
     assert.ok(
       titleStyle(out[0]).includes(expected),
-      `${fn} 应使用主题色 ${expected}，实际样式 ${titleStyle(out[0])}`
+      `${fn} 应使用主题填充色 ${expected}，实际样式 ${titleStyle(out[0])}`
+    )
+    assert.ok(
+      contentStyle(out[0]).includes(expected),
+      `${fn} 应使用主题文字色 ${expected}，实际样式 ${contentStyle(out[0])}`
     )
   }
 })
 
 test('R1: configure({theme}) 与 setTheme 等价', () => {
   reset()
-  prettyLog.configure({ theme: { infoColor: '#ABCDEF' } })
+  prettyLog.configure({ theme: { fills: { info: '#ABCDEF' } } })
   const out = captureLog(() => prettyLog.info('标题', '内容'))
   assert.ok(titleStyle(out[0]).includes('#ABCDEF'), 'configure 应同样生效')
 })

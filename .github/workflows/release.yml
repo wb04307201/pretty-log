@@ -60,8 +60,11 @@ jobs:
       # （实测，连零依赖的空包都装不上），先于发布步骤崩掉。
       # OIDC 不需要 .npmrc：npm CLI 在凭据检查之前就完成 id_token 交换并
       # 直接设置 token，故这里无需任何认证配置。
+      #
+      # uses 主版本钉在 v7（现行最新）：v4 的 node20 运行时已被 GitHub 弃用，
+      # 会被强制跑在 node24 上并持续报 deprecation 警告；v5 起即 node24 运行时。
       - name: 准备 Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
 
@@ -77,7 +80,7 @@ jobs:
           npm --version
 
       - name: 检出被 release 的 tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # release 事件的 ref 形如 refs/tags/v1.2.3，取其 tag 名显式检出
           ref: ${{ github.ref }}

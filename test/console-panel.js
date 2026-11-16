@@ -302,6 +302,30 @@ const buildPanel = () => {
   })
   header.appendChild(clearBtn)
 
+  // 黑白主题切换：按钮文案显示当前主题（与"自动滚动"同为状态式），
+  // 选择写入 localStorage，刷新后保持，方便反复对照测试。
+  const themeBtn = el('button', 'pl-btn', '主题：黑')
+  const applyTheme = (light) => {
+    panelEl.classList.toggle('theme-light', light)
+    themeBtn.textContent = light ? '主题：白' : '主题：黑'
+    try {
+      localStorage.setItem('pl-panel-theme', light ? 'light' : 'dark')
+    } catch {
+      // localStorage 不可用（隐私模式等）时静默，主题切换照常工作
+    }
+  }
+  themeBtn.addEventListener('click', () => {
+    applyTheme(!panelEl.classList.contains('theme-light'))
+  })
+  header.appendChild(themeBtn)
+  let savedLight = false
+  try {
+    savedLight = localStorage.getItem('pl-panel-theme') === 'light'
+  } catch {
+    // 同上
+  }
+  applyTheme(savedLight)
+
   // 全屏 / 半屏 / 收起 三态循环
   const sizeBtn = el('button', 'pl-btn', '全屏')
   const SIZES = [

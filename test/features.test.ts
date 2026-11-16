@@ -66,16 +66,8 @@ function reset(): void {
     showEmoji: false,
     showTimestamp: false,
     historySize: 200,
-    theme: {
-      infoColor: '#A6A6A6',
-      errorColor: '#EC7270',
-      warningColor: '#F1AC6A',
-      successColor: '#95DA69',
-      debugColor: '#5BC0EB',
-      groupColor: '#7B79E8',
-      timeColor: '#7B79E8',
-    },
   })
+  prettyLog.resetTheme()
   prettyLog.clearHistory()
   prettyLog.clearOnce()
   prettyLog.clearCounters()
@@ -131,6 +123,7 @@ test('R6: group / timeEnd / rainbow 的专属 emoji 可被打出', () => {
     prettyLog.time('t')
     prettyLog.timeEnd('t')
   })
+  // 针脚依赖徽章 label 的 `t:` 冒号格式（保留该格式是裁定，勿「清理」）
   const timeLine = t.log.map(fmt).find((s) => s.includes('t:'))
   assert.ok(timeLine?.includes('⏱️'), `timeEnd 应带 ⏱️，实际：${timeLine}`)
 
@@ -166,10 +159,13 @@ test('R8: table 遵守日志级别过滤', () => {
   assert.equal(out.log.length, 0, 'logLevel=error 时 table 不应输出')
 })
 
-test('R8: table 写入历史', () => {
+test('R8: table 写入历史（title=表名、内容为未截断全量文本）', () => {
   reset()
-  capture(() => prettyLog.table([{ a: 1 }]))
-  assert.ok(prettyLog.getHistory().length > 0, 'table 应写入历史')
+  const long = 'x'.repeat(30)
+  capture(() => prettyLog.table([{ a: long }], 'R8 表'))
+  const entry = prettyLog.getHistory().slice(-1)[0]
+  assert.equal(entry.title, 'R8 表', '历史 title 应为表名')
+  assert.equal(entry.content[0], `a\n${long}`, '历史内容应为未截断全量纯文本（表头+各行）')
 })
 
 // ---------------------------------------------------------------- R9 timer
@@ -299,7 +295,7 @@ test('R12: withPrefix 返回的 logger 自动带上前缀', () => {
 
 test('R12: withPrefix 保持底层日志级别与主题', () => {
   reset()
-  prettyLog.setTheme({ infoColor: '#00FF00' })
+  prettyLog.setTheme({ fills: { info: '#00FF00' } })
   const userLog = prettyLog.withPrefix('P')
   const out = capture(() => userLog.info('标题', '内容'))
   assert.ok(
