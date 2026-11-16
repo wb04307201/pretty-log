@@ -11,9 +11,10 @@
  *
  * 主题（黑白底）与 pretty-log 的 mode 成对联动：mode 决定 texts 等预设色
  * 取深底还是浅底值，只换底不换 mode 会看到浅底色值浮在黑底上，与真实
- * 控制台同主题的观感不符。默认底色跟随系统（同 mode 的解析规则），
- * 切换按钮会落盘并刷新重放演示日志——行的颜色在打印瞬间已定，
- * 只有重打才能让全部行在新主题下成对渲染。见 applyTheme。
+ * 控制台同主题的观感不符。默认白底——原生 console（DevTools）默认就是
+ * 浅色观感，跟随系统反而会在深色系统上起手黑底、与参照不符；
+ * 用户点选过主题则落盘并刷新重放演示日志（行的颜色在打印瞬间已定，
+ * 只有重打才能让全部行在新主题下成对渲染）。见 applyTheme。
  */
 
 /** 最多保留的条目数，防止长时间运行拖慢页面 */
@@ -279,7 +280,7 @@ const applyTheme = (light) => {
 
 /**
  * 记住用户点选的主题，刷新后保持（仅用户点击落盘；
- * 未点选时默认跟随系统，不写入）。
+ * 未点选时默认白底，不写入）。
  */
 const persistTheme = (light) => {
   try {
@@ -353,7 +354,7 @@ const buildPanel = () => {
     location.reload()
   })
   header.appendChild(themeBtn)
-  // 未点选过则跟随系统（与库的 mode 解析规则一致），点选过则用点选值
+  // 未点选过默认白底（贴近原生 console 的默认观感），点选过则用点选值
   let savedTheme = null
   try {
     const saved = localStorage.getItem('pl-panel-theme')
@@ -361,10 +362,7 @@ const buildPanel = () => {
   } catch {
     // 同上
   }
-  const systemLight = typeof matchMedia === 'function'
-    ? matchMedia('(prefers-color-scheme: light)').matches
-    : true
-  applyTheme(savedTheme === null ? systemLight : savedTheme === 'light')
+  applyTheme(savedTheme !== 'dark')
 
   // 全屏 / 半屏 / 收起 三态循环
   const sizeBtn = el('button', 'pl-btn', '全屏')

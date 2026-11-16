@@ -13,9 +13,11 @@ body.has-console-panel {
 }
 
 #console-panel {
-  /* 主题变量：默认深色黑底，.theme-light 覆盖为白底。
-     日志内容的内联 %c 样式刻意不参与换肤——切白底就是为了看
-     pretty-log 的样式在浅色 console 上是什么观感。 */
+  /* 主题变量：基底为深色，.theme-light 覆盖为白底——运行时默认白底
+     （面板初建即由 JS 落类，见 console-panel.js 的 applyTheme），
+     深底是点选后的可选观感。
+     日志内容的内联 %c 样式刻意不参与换肤——切底色就是为了看
+     pretty-log 的样式在对应 console 上是什么观感。 */
   --pl-bg: #202124;
   --pl-fg: #e8eaed;
   --pl-muted: #9aa0a6;
