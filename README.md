@@ -6,7 +6,7 @@
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
-![pretty-log output](docs/images/hero.png)
+![pretty-log output](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/hero.png)
 
 ## Contributing
 
@@ -68,7 +68,7 @@ prettyLog.info({a: 100, b: {b1: 'one', b2: 'two'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: 'one', b2: 'two'}, c: [5, 6, 7]})
 ```
 
-![Group output, tables, pictures and prefixed loggers](docs/images/advanced.png)
+![Group output, tables, pictures and prefixed loggers](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/advanced.png)
 
 ## Advanced Features
 
@@ -149,7 +149,7 @@ Default palette (P1, soft and desaturated):
 
 `badgeText` defaults to `#1f2330`; `rainbow` defaults to the gradient `#f9a8d4 → #c4b5fd → #93c5fd → #6ee7b7 → #fde68a` with text `#23273a` (both shared across backgrounds).
 
-![Side-by-side appearance on dark and light consoles](docs/images/theme-compare.png)
+![Side-by-side appearance on dark and light consoles](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/theme-compare.png)
 
 > Both backgrounds are now covered: the default mode follows the system, so a light console gets the light presets out of the box (pin `setTheme({ mode })` only when the console theme diverges from the system); your overrides carry over across modes.
 
@@ -278,7 +278,7 @@ Note: `timer` still runs the function you give it in production — only the log
 ### Trigger-Word Animations (Easter Egg)
 When the stringified log text contains a trigger word, a full-screen particle animation plays in the page. Matching is a case-sensitive substring check in table order — the first hit wins, one animation per log call, and consecutive hits only play once (about a 2-second cooldown after each play).
 
-![Confetti and lightning triggered by log text](docs/images/effects.gif)
+![Confetti and lightning triggered by log text](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/effects.gif)
 
 Default trigger table:
 
