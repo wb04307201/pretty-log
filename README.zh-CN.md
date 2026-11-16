@@ -6,7 +6,7 @@
 
 [![NPM](https://nodei.co/npm/@wb04307201/pretty-log.png)](https://nodei.co/npm/@wb04307201/pretty-log/)
 
-![pretty-log 输出效果](docs/images/hero.png)
+![pretty-log 输出效果](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/hero.png)
 
 ## 安装
 ```sh
@@ -64,7 +64,7 @@ prettyLog.info({a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 prettyLog.info("JSON", {a: 100, b: {b1: '一一一', b2: '二二二'}, c: [5, 6, 7]})
 ```
 
-![组输出、表格、图片与带前缀的 logger](docs/images/advanced.png)
+![组输出、表格、图片与带前缀的 logger](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/advanced.png)
 
 ## 高级功能
 
@@ -145,7 +145,7 @@ prettyLog.resetTheme();  // 清空全部覆盖并回到环境默认
 
 `badgeText` 默认 `#1f2330`；`rainbow` 默认渐变 `#f9a8d4 → #c4b5fd → #93c5fd → #6ee7b7 → #fde68a`、文字 `#23273a`（两者深浅两底通用）。
 
-![深色 / 浅色控制台下的观感对照](docs/images/theme-compare.png)
+![深色 / 浅色控制台下的观感对照](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/theme-compare.png)
 
 > 深/浅两套文字色均已适配：默认自动跟随系统，浅色控制台开箱即用浅底预设（仅当控制台主题与系统不一致时才需 `setTheme({ mode })` 固定），用户覆盖跨模式保留。
 
@@ -275,7 +275,7 @@ prettyLog.info('这条不会出现');
 ### 触发词动画（彩蛋）
 日志文本命中触发词时，页面上会播放一个全屏粒子动画。按词表顺序做大小写敏感的子串匹配，首个命中生效；一次日志调用最多播一个动画，连续触发只播一次（播完约 2 秒冷却）。
 
-![撒花与打雷的触发效果](docs/images/effects.gif)
+![撒花与打雷的触发效果](https://cdn.jsdelivr.net/gh/wb04307201/pretty-log@master/docs/images/effects.gif)
 
 默认词表：
 
