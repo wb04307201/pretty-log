@@ -7,6 +7,12 @@
  * 因此页面上的效果与真实控制台基本一致，图片日志（picture）也能正常显示。
  *
  * 原生 console 调用依然透传，开发者工具里的行为不受影响。
+ *
+ * 主题（黑白底）与 pretty-log 的 mode 成对联动：mode 决定 texts 等预设色
+ * 取深底还是浅底值，只换底不换 mode 会看到浅底色值浮在黑底上，与真实
+ * 控制台同主题的观感不符。默认底色跟随系统（同 mode 的解析规则），
+ * 切换按钮会落盘并刷新重放演示日志——行的颜色在打印瞬间已定，
+ * 只有重打才能让全部行在新主题下成对渲染。见 applyTheme。
  */
 
 /** 最多保留的条目数，防止长时间运行拖慢页面 */
@@ -16,6 +22,7 @@ let panelEl = null
 let listEl = null
 let counterEl = null
 let scrollEl = null
+let themeBtn = null
 
 /** 当前所在的容器栈，栈底是列表本身；group 时入栈、groupEnd 时出栈 */
 const containerStack = []
@@ -248,6 +255,30 @@ const closeGroup = () => {
 }
 
 /**
+ * 切换面板黑白主题（底色 + 库 mode 一起切）。
+ *
+ * setTheme({ mode }) 只切预设，不动用户的其它主题覆盖；
+ * 这样「底色 ↔ 预设色」始终成对，等价于预览一台同主题的真实控制台。
+ */
+const applyTheme = (light) => {
+  panelEl.classList.toggle('theme-light', light)
+  if (themeBtn) themeBtn.textContent = light ? '主题：白' : '主题：黑'
+  window.prettyLog?.setTheme?.({ mode: light ? 'light' : 'dark' })
+}
+
+/**
+ * 记住用户点选的主题，刷新后保持（仅用户点击落盘；
+ * 未点选时默认跟随系统，不写入）。
+ */
+const persistTheme = (light) => {
+  try {
+    localStorage.setItem('pl-panel-theme', light ? 'light' : 'dark')
+  } catch {
+    // localStorage 不可用（隐私模式等）时静默，主题切换照常工作
+  }
+}
+
+/**
  * 按 console 方法名分发
  */
 const handle = (method, args) => {
@@ -302,29 +333,27 @@ const buildPanel = () => {
   })
   header.appendChild(clearBtn)
 
-  // 黑白主题切换：按钮文案显示当前主题（与"自动滚动"同为状态式），
-  // 选择写入 localStorage，刷新后保持，方便反复对照测试。
-  const themeBtn = el('button', 'pl-btn', '主题：黑')
-  const applyTheme = (light) => {
-    panelEl.classList.toggle('theme-light', light)
-    themeBtn.textContent = light ? '主题：白' : '主题：黑'
-    try {
-      localStorage.setItem('pl-panel-theme', light ? 'light' : 'dark')
-    } catch {
-      // localStorage 不可用（隐私模式等）时静默，主题切换照常工作
-    }
-  }
+  // 黑白主题切换：按钮文案显示当前主题（与"自动滚动"同为状态式）。
+  // 点选落盘后刷新重放演示日志——行的颜色在打印瞬间已定，只有重打
+  // 才能让全部行在新主题下成对渲染（底色 ↔ 预设色，见 applyTheme）。
+  themeBtn = el('button', 'pl-btn', '主题：黑')
   themeBtn.addEventListener('click', () => {
-    applyTheme(!panelEl.classList.contains('theme-light'))
+    persistTheme(!panelEl.classList.contains('theme-light'))
+    location.reload()
   })
   header.appendChild(themeBtn)
-  let savedLight = false
+  // 未点选过则跟随系统（与库的 mode 解析规则一致），点选过则用点选值
+  let savedTheme = null
   try {
-    savedLight = localStorage.getItem('pl-panel-theme') === 'light'
+    const saved = localStorage.getItem('pl-panel-theme')
+    if (saved === 'light' || saved === 'dark') savedTheme = saved
   } catch {
     // 同上
   }
-  applyTheme(savedLight)
+  const systemLight = typeof matchMedia === 'function'
+    ? matchMedia('(prefers-color-scheme: light)').matches
+    : true
+  applyTheme(savedTheme === null ? systemLight : savedTheme === 'light')
 
   // 全屏 / 半屏 / 收起 三态循环
   const sizeBtn = el('button', 'pl-btn', '全屏')

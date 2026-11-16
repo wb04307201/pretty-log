@@ -22,13 +22,13 @@
     <button id="fx-btn-toggle">关闭彩蛋</button>
 </section>
 <script type="module">
-    // 必须最先安装面板，才能捕获后续所有日志
     import { installConsolePanel } from './console-panel.js'
-    installConsolePanel()
-
     import * as prettyLog from '../src/index.ts'
     // 暴露到全局便于目检时在控制台注入样例数据（仅测试页，不影响库本身）
     window.prettyLog = prettyLog
+    // 面板必须在第一条日志前安装（两条 import 先于语句体执行，顺序不受影响）；
+    // window.prettyLog 先挂好，面板初始化的主题同步（setTheme({mode})）才拿得到库。
+    installConsolePanel()
 
     // 本地样图：内联为 data URI，彻底不依赖网络与打包器的静态资源管线。
     // （早前试过 './sample.png' 与 '/test/sample.png' 两种相对路径，
@@ -123,6 +123,11 @@
     prettyLog.info("绿色信息")
     prettyLog.error("红色错误")
     prettyLog.resetTheme()  // 恢复
+    // resetTheme 回到「环境默认 mode」（跟随系统），可能与面板预览主题不同步；
+    // 按面板底色回钉 mode，保持演示整表的「底色 ↔ 预设色」成对
+    prettyLog.setTheme({
+        mode: document.getElementById('console-panel').classList.contains('theme-light') ? 'light' : 'dark',
+    })
 
     // --- 一次性配置 ---
     console.log('--- 一次性配置 ---')
