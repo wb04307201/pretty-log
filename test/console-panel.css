@@ -13,13 +13,17 @@ body.has-console-panel {
 }
 
 #console-panel {
-  /* 主题变量：默认深色黑底，.theme-light 覆盖为白底。
-     日志内容的内联 %c 样式刻意不参与换肤——切白底就是为了看
-     pretty-log 的样式在浅色 console 上是什么观感。 */
+  /* 主题变量：基底为深色，.theme-light 覆盖为白底——运行时默认白底
+     （面板初建即由 JS 落类，见 console-panel.js 的 applyTheme），
+     深底是点选后的可选观感。
+     日志内容的内联 %c 样式刻意不参与换肤——切底色就是为了看
+     pretty-log 的样式在对应 console 上是什么观感。 */
   --pl-bg: #202124;
   --pl-fg: #e8eaed;
   --pl-muted: #9aa0a6;
   --pl-border: #3c4043;
+  /* 消息行间分隔线：深底用低对比蓝灰，浅底实测 DevTools 为 #d3e3fd */
+  --pl-sep: #3c4a63;
   --pl-header-bg: #292a2d;
   --pl-btn-bg: #3c4043;
   --pl-btn-hover: #4a4d51;
@@ -35,10 +39,12 @@ body.has-console-panel {
      1. 中文 —— Consolas 等宽字体没有 CJK 字形，中文会显示成横线
      2. Emoji —— 同理，emoji 会显示成占位方框
      3. ASCII —— 前置 Consolas 保证代码对齐
-     中文放在 emoji 之前，避免被后面的 emoji 字体抢占。 */
-  font: 12px/1.5 Consolas, 'Cascadia Mono', 'Courier New', 'Microsoft YaHei',
-    'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI Emoji', 'Noto Color Emoji',
-    monospace;
+     中文放在 emoji 之前，避免被后面的 emoji 字体抢占。
+     CJK 首选 SimSun/NSimSun：真实控制台的等宽上下文里中文落在系统
+     衬线等宽（宋体）上，雅黑会显得比 DevTools「圆」，放同一字体才对齐。 */
+  font: 12px/1.5 Consolas, 'Cascadia Mono', 'Courier New', SimSun, NSimSun,
+    'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI Emoji',
+    'Noto Color Emoji', monospace;
   z-index: 1000;
 }
 
@@ -48,6 +54,7 @@ body.has-console-panel {
   --pl-fg: #202124;
   --pl-muted: #5f6368;
   --pl-border: #dadce0;
+  --pl-sep: #d3e3fd;
   --pl-header-bg: #f1f3f4;
   --pl-btn-bg: #e8eaed;
   --pl-btn-hover: #dadce0;
@@ -108,38 +115,68 @@ body.has-console-panel {
   padding: 8px 12px;
 }
 
-/* 每条日志一行 */
+/* 每条日志一行。左缘是消息基准线：标题徽章与消息分隔线都贴它；
+   续行内容框再右移 4px，左边缝里嵌续行圆点（见 br + .pl-seg）——
+   Chrome DevTools 实测（125% 缩放截图）：徽章 x=1262、内容框 x=1267
+   （差 5 设备像素）、圆点墨迹 x=1262..1266 紧贴框线。 */
 .pl-row {
-  margin-bottom: 4px;
+  margin: 0 0 2px;
   word-break: break-word;
+}
+
+/* 消息之间的淡色分隔线，对齐 DevTools 消息行间细线（浅底实测 #d3e3fd）。
+   上 margin 2px、下 padding 2px——DPR 1.25 栅格化后恰为 DevTools
+   实测的 3px/分隔线/2px 节奏（3px margin 反而多出一行）。 */
+.pl-row + .pl-row {
+  border-top: 1px solid var(--pl-sep);
+  padding-top: 2px;
 }
 
 .pl-row .pl-seg {
   display: inline-block;
   vertical-align: top;
   white-space: pre-wrap;
+  /* 行高决定色框高：内联块高 = 行高 + padding + border。1.5 行高时色框
+     比真实控制台高约 20%（27px vs 23px），1.2 时两边一致（约 18.4px）。 */
+  line-height: 1.2;
+  position: relative;
 }
 
-/* 各方法的左侧标记颜色，与 DevTools 习惯一致 */
-.pl-row::before {
+/* 续行（\n 之后的片段）整体右移 4px，左边缝留给圆点 */
+br + .pl-seg {
+  margin-left: 4px;
+}
+
+/* 续行圆点：实心小圆，颜色继承片段的 %c 文字色（红框红点、黄框黄点）。
+   实测 DevTools 圆点直径约 4px、紧贴框线（缝 0~1px）。用固定圆点而
+   不是 • 字形：字形墨迹随字体漂移，圆点位置才精确可控。
+   left:-5px 是按含边框的色框算的——绝对定位相对内边距盒，色框有
+   1px 边框，圆点右缘正好落在边框外缘上。 */
+br + .pl-seg::before {
   content: '';
-  display: inline-block;
-  width: 10px;
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
-.pl-warn::before {
+/* 各方法的左侧标记颜色，与 DevTools 习惯一致。
+   仅原生 console.warn/error/debug 有此标记——prettyLog 的样式日志
+   一律走 console.log（见 src/index.ts 的 prettyPrint），无标记。 */
+.pl-warn {
   border-left: 3px solid #f9ac6a;
-  margin-right: 6px;
 }
 
-.pl-error::before {
+.pl-error {
   border-left: 3px solid #ec7270;
-  margin-right: 6px;
 }
 
-.pl-debug::before {
+.pl-debug {
   border-left: 3px solid #5bc0eb;
-  margin-right: 6px;
 }
 
 /* 分组 */
